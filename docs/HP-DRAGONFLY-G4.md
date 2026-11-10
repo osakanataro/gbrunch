@@ -88,7 +88,8 @@ It restores those two partitions from the image and reformats userdata.
 
 ### Release kit: build the image without building the assets
 
-`tools/usb/package-release.sh assets-dir OUTDIR` packs a Dragonfly asset directory into a redistributable
+`tools/usb/package-release.sh assets-dir OUTDIR` packs a profile asset directory (its `kit.json` names the image and the
+laptop's firmware keys for the READMEs) into a redistributable
 `gbrunch-hp-dragonfly-g4-kit-<compat>.tar.gz`. The tarball holds the assets, the `tools/usb` scripts,
 `make-usb-kit.sh`, the kit READMEs from `tools/usb/kit/`, and the license notices (`tools/usb/kit/NOTICE.txt`,
 `camera/licenses/`). Before packing, the script checks every asset against `native-assets.json` and checks

@@ -31,4 +31,19 @@ GBVENDOR (payload/extra-vendor.json): the DRAS audio fallback XML files, the cam
                      public AOSP platform test key (android.googlesource.com/platform/build,
                      target/product/security/testkey).
 
+assets-*/kernel, assets-*/modules/, and modules/*.ko inside assets-*/compat.ext4 (only in kits whose profile
+                     uses a replacement kernel; assets-*/kernel.json lists them with hashes):
+                     Linux kernel built by tools/build_profile_kernel.py. License: GPL-2.0 (GPL-2.0.txt).
+                     Corresponding source: Android common kernel commit 3938c8d97142d5cf31543aa96f864a2cf832dda0
+                     plus gki-kernel/ (patches and config fragments) and profiles/<profile>/kernel.* in
+                     https://github.com/osakanataro/gbrunch at the commit named in assets-*/kernel.json. The
+                     patches come from gbOS86 (memfd ashmem shim), GBRUNCH (AVX-VNNI emulation) and
+                     linux-surface (Surface Aggregator, buttons, GPE); see gki-kernel/README.md.
+
+surface/ inside assets-*/compat.ext4 (Surface profiles): iptsd and iptsd-check-device, linux-surface/iptsd
+                     v3.1.1 (GPL-2.0-or-later) built statically for Android by surface/build-iptsd.sh with its
+                     dependencies CLI11, Eigen, fmt, inih, Microsoft GSL and spdlog; license texts in
+                     /oem/surface/licenses. Source: https://github.com/linux-surface/iptsd commit
+                     106f944ac097f8eb779bdfee0487d58ae853c375 plus surface/patches/ in the GBRUNCH repository.
+
 usb/, make-usb-kit.sh  GBRUNCH scripts, MIT (repository LICENSE).

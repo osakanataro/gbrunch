@@ -14,7 +14,8 @@ No root is needed for the build. KVM is not used.
   bash gbrunch-*-kit-*/make-usb-kit.sh --recovery-zip recovery.zip ~/gbrunch-out
 
 The result is ~/gbrunch-out/usb-kit/ (image, hash, usb/ scripts and README.txt with the steps for a
-USB disk or the internal NVMe SSD). The build log is ~/gbrunch-out/googlebook-dragonfly.img.build-vm.log.
+USB disk or the internal NVMe SSD, with the firmware keys of the kit's laptop) and the GBVENDOR image for
+apply-vendor-update.sh. The build log is ~/gbrunch-out/<image>.build-vm.log; the image name is in assets-*/kit.json.
 
 Files: make-usb-kit.sh, README-usb-kit.txt (copied into usb-kit/), assets-*/ (build assets), usb/,
 licenses/, NOTICE.txt, SHA256SUMS (checked by make-usb-kit.sh).

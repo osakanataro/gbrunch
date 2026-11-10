@@ -1,0 +1,19 @@
+From: GBRUNCH
+Subject: [PATCH] media: ipu6: build with DYNAMIC_DEBUG_MODULE
+
+The Android common kernel has DYNAMIC_DEBUG_CORE but not DYNAMIC_DEBUG, so
+the IPU6/IPU4P dev_dbg() messages (CSI-2 receiver errors, D-PHY timing,
+SOF/EOF events) cannot be enabled at all. Compile the IPU6 objects with
+DYNAMIC_DEBUG_MODULE so "insmod intel-ipu6-isys.ko dyndbg=+p" turns them on;
+they stay off otherwise.
+
+--- a/drivers/media/pci/intel/ipu6/Makefile
++++ b/drivers/media/pci/intel/ipu6/Makefile
+@@ -1,5 +1,7 @@
+ # GBRUNCH: 7.x allocation helpers on the 6.18 Android common kernel
+ ccflags-y += -include $(srctree)/include/media/gbrunch-alloc-compat.h
++# GBRUNCH: dev_dbg() through dynamic debug (dyndbg= module parameter)
++ccflags-y += -DDYNAMIC_DEBUG_MODULE
+ # SPDX-License-Identifier: GPL-2.0-only
+ 
+ intel-ipu6-y			:= ipu6.o \

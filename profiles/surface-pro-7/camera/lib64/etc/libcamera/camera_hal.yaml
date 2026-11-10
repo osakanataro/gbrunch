@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: CC0-1.0
+# GBRUNCH libcamera Android HAL configuration (Microsoft Surface Pro 7: IPU4P through the IPU6 driver).
+# The key is the libcamera camera ID, the ACPI path of the sensor (libcamera logs of the IPU4P series).
+cameras:
+  '\_SB_.PCI0.I2C2.CAMF':
+    location: front
+    rotation: 0
+  '\_SB_.PCI0.I2C3.CAMR':
+    location: back
+    rotation: 0

@@ -1,0 +1,67 @@
+From 620978e6553dc109dc6a43e05595d01218017e5c Mon Sep 17 00:00:00 2001
+From: GBRUNCH <gbrunch@invalid>
+Date: Tue, 10 Nov 2026 20:55:07 +0900
+Subject: [PATCH] libcamera: base: log: Read log levels from
+ LIBCAMERA_SYSCONF_DIR/log-levels
+
+libcamera takes LIBCAMERA_LOG_LEVELS from secure_getenv(), so processes
+started through a domain transition (AT_SECURE), such as the Android camera
+provider, cannot raise their log levels at all, and logSetLevel() from the
+HAL only reaches categories that already exist. When the variable is not
+set, read the same category:LEVEL list from a log-levels file in the
+system configuration directory (GBRUNCH, 2026-11-10: the Surface Pro 7 rear
+camera delivers no frames in video mode).
+---
+ src/libcamera/base/log.cpp | 31 +++++++++++++++++++++++++++++++
+ 1 file changed, 31 insertions(+)
+
+diff --git a/src/libcamera/base/log.cpp b/src/libcamera/base/log.cpp
+index 81b14ac..bf2cd13 100644
+--- a/src/libcamera/base/log.cpp
++++ b/src/libcamera/base/log.cpp
+@@ -7,7 +7,9 @@
+ 
+ #include <libcamera/base/log.h>
+ 
++#include <algorithm>
+ #include <array>
++#include <cctype>
+ #include <charconv>
+ #include <fnmatch.h>
+ #include <fstream>
+@@ -645,6 +647,35 @@ void Logger::parseLogFile()
+ void Logger::parseLogLevels()
+ {
+ 	const char *debug = utils::secure_getenv("LIBCAMERA_LOG_LEVELS");
++
++#ifdef LIBCAMERA_SYSCONF_DIR
++	/*
++	 * GBRUNCH: secure_getenv() hides LIBCAMERA_LOG_LEVELS from processes
++	 * started through a domain transition (AT_SECURE), such as the Android
++	 * camera provider. Without the variable, read the same "category:LEVEL"
++	 * list from LIBCAMERA_SYSCONF_DIR/log-levels (commas or newlines
++	 * between entries, '#' starts a comment line). Parsing it here, unlike
++	 * logSetLevel(), also covers categories created later.
++	 */
++	std::string fileLevels;
++	if (!debug) {
++		std::ifstream file(LIBCAMERA_SYSCONF_DIR "/log-levels");
++		std::string line;
++		while (std::getline(file, line)) {
++			line.erase(std::remove_if(line.begin(), line.end(),
++						  [](unsigned char c) { return std::isspace(c); }),
++				   line.end());
++			if (line.empty() || line[0] == '#')
++				continue;
++			if (!fileLevels.empty())
++				fileLevels += ',';
++			fileLevels += line;
++		}
++		if (!fileLevels.empty())
++			debug = fileLevels.c_str();
++	}
++#endif
++
+ 	if (!debug)
+ 		return;
+ 

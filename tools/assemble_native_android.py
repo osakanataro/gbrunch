@@ -71,6 +71,7 @@ def main():
     p.add_argument('--cache',type=pathlib.Path,default=pathlib.Path('google-recovery-cache'))
     p.add_argument('--assets',type=pathlib.Path,default=pathlib.Path(__file__).resolve().parent)
     p.add_argument('--format',choices=['raw','qcow2'],default='raw')
+    p.add_argument('--local-files',type=pathlib.Path,help='directory with the non-redistributable files the profile lists in local_files (e.g. surface/fetch-ipu4p-firmware.sh output)')
     a=p.parse_args();out=a.output.absolute();a.cache=a.cache.resolve();assets=a.assets.resolve()
     if out.exists() or out.is_symlink() or str(out).startswith('/dev/') or not out.parent.is_dir():p.error('Output must be a NEW regular file in an existing directory.')
     for t in ['qemu-system-x86_64','qemu-img','qemu-io','mcopy','mformat','lz4']:
@@ -92,9 +93,26 @@ def main():
         marker=w/'GBRUNCH-BUILD-MARKER.txt';marker.write_text('GBRUNCH local build-tool work disk\n')
         run('mcopy','-i',fat,marker,'::/')
         print('Deriving vendor and matching modules in isolated Linux build VM...',flush=True)
+        tool_initrd=assets/'tool-initrd.gz'
+        local=manifest.get('local_files',[])
+        if local:
+            # Non-redistributable files go only into this local build: append them to a private copy of the initrd.
+            got=[]
+            for v in local:
+                f=(a.local_files/v['local']) if a.local_files else None
+                if f is None or not f.is_file():
+                    print('WARNING: %s not supplied (--local-files); %s'%(v['local'],v.get('fetch','')),flush=True);continue
+                b=f.read_bytes()
+                if hashlib.sha256(b).hexdigest()!=v['sha256']:raise ValueError('local file hash mismatch: '+v['local'])
+                got.append(('payload/local/'+v['local'],b))
+            if got:
+                dirs=sorted({'/'.join(('payload/local/'+v['local']).split('/')[:i]) for v in local for i in range(2,len(('payload/local/'+v['local']).split('/')))})
+                member=b''.join(entry(d,b'',stat.S_IFDIR|0o755,960000+i) for i,d in enumerate(dirs))
+                member+=b''.join(entry(n,b,stat.S_IFREG|0o644,961000+i) for i,(n,b) in enumerate(got))+entry('TRAILER!!!',b'',0,969999)
+                tool_initrd=w/'tool-initrd-local.gz';tool_initrd.write_bytes((assets/'tool-initrd.gz').read_bytes()+gzip.compress(member,mtime=0))
         vm=['qemu-system-x86_64','-machine','q35','-accel','tcg','-cpu','qemu64','-m','1024','-smp','2',
             '-vga','none','-display','none','-serial','stdio','-monitor','none','-net','none','-no-reboot',
-            '-kernel',assets/'tool-linux-kernel','-initrd',assets/'tool-initrd.gz',
+            '-kernel',assets/'tool-linux-kernel','-initrd',tool_initrd,
             '-append','rdinit=/init console=ttyS0,115200 loglevel=6 panic=0 gbrunch.toolvm=1',
             '-drive',f'if=none,id=work,format=raw,file={fat}','-device','virtio-blk-pci,drive=work',
             '-drive',f'if=none,id=recovery,format=raw,readonly=on,file={base}','-device','virtio-blk-pci,drive=recovery']
@@ -106,10 +124,18 @@ def main():
         assert sha(vendor)==result['vendor_sha256'] and vendor.stat().st_size==result['vendor_bytes']
         kernel,original_ramdisk=original_boot_parts(blobs)
         assert hashlib.sha256(kernel).hexdigest()==manifest['google_kernel_sha256']
+        # A hardware profile may replace Google's kernel with one built from the same ACK revision
+        # (tools/build_profile_kernel.py). Its first-stage modules then come from the kit, not from the
+        # recovery; Google's ramdisk, system and vendor stay as they are.
+        replacement=manifest.get('replacement_kernel')
+        if replacement:
+            kernel=(assets/replacement['file']).read_bytes()
+            assert hashlib.sha256(kernel).hexdigest()==replacement['sha256'],'replacement kernel hash mismatch'
         (w/'kernel').write_bytes(kernel)
         extra={};deps=[];aliases=[];modules=manifest['modules'];names={v['name']:v['file'] for v in modules}
         for v in modules:
-            b=subprocess.check_output(['mcopy','-i',str(fat),'::/modules/'+v['file'],'-'])
+            if replacement:b=(assets/'modules'/v['file']).read_bytes()
+            else:b=subprocess.check_output(['mcopy','-i',str(fat),'::/modules/'+v['file'],'-'])
             assert hashlib.sha256(b).hexdigest()==v['sha256']
             extra['lib/modules/'+v['file']]=(stat.S_IFREG|0o644,b)
             d=['/lib/modules/'+names[x.replace('-','_')] for x in v['depends']]
@@ -129,7 +155,7 @@ def main():
         fat.unlink()  # All verified outputs are read; release the local VM scratch disk.
         vb=blobs['vbmeta_a'];vs=256+int.from_bytes(vb[12:20],'big')+int.from_bytes(vb[20:28],'big')
         cmd=manifest['cmdline'].replace('BOOT_GUID',by['boot_a']['guid']).replace('VBMETA_SIZE',str(vs)).replace('VBMETA_DIGEST',hashlib.sha256(vb[:vs]).hexdigest())
-        (w/'grub.cfg').write_text(render_boot_menu(cmd))
+        (w/'grub.cfg').write_text(render_boot_menu(cmd,kernel=replacement['release'] if replacement else None))
         esp=w/'esp.fat';shutil.copyfile(assets/'esp-template.fat',esp)
         for file,n in [(w/'kernel','kernel'),(w/'initrd.gz','initrd.gz'),(w/'grub.cfg','grub.cfg')]:run('mcopy','-o','-i',esp,file,'::/EFI/GBRUNCH/'+n)
         logfat=w/'logs.fat'
@@ -172,6 +198,9 @@ def main():
         report={'scope':'local experimental Android image; HP interface not yet tested','physical_boot_enabled':manifest['physical_boot_enabled'],'original_raw_sha256':RAW_HASH,
                 'system_preservation':'All original GPT records retained; EFI changed only in output; original super/system/vendor bytes untouched',
                 'vendor':result,'appended_partitions':appended,'cmdline':cmd,'format':a.format,
+                'kernel':({'source':'profile replacement kernel','release':replacement['release'],'sha256':replacement['sha256'],
+                           'google_kernel_sha256':manifest['google_kernel_sha256']} if replacement else
+                          {'source':'original Google kernel','sha256':manifest['google_kernel_sha256']}),
                 'userdata_encryption':'disabled for this experiment','output_sha256':sha(out),'distribution':'local use only; do not upload this image'}
         out.with_name(out.name+'.manifest.json').write_text(json.dumps(report,indent=2)+'\n')
     print('Prepared local experimental image:',out,flush=True)

@@ -14,6 +14,11 @@ PROFILES=[
      'product':'HP Dragonfly 13.5 inch G4 Notebook PC','board':'8B63',
      # Without these the eDP plane faults (black panel) and avs claims the DSP; see prepare_profile_assets.
      'requires':['xe.enable_psr=0','xe.enable_dpt=0','xe.enable_fbc=0','snd_intel_dspcfg.dsp_driver=3']},
+    # Ice Lake: only bootable with the profile's replacement kernel (i915, AVX-VNNI emulation), which
+    # prepare_profile_assets marks on the command line. Board string to be confirmed on the hardware.
+    {'name':'Microsoft Surface Pro 7','status':'profile','vendor':'Microsoft Corporation',
+     'product':'Surface Pro 7','board':'Surface Pro 7',
+     'requires':['androidboot.gbrunch_kernel=gbrunch-sp7']},
 ]
 
 def admitted(cmd):
@@ -51,11 +56,16 @@ def command_line(config):
         raise ValueError('Missing boot partition UUID')
     return cmd
 
-def render(cmd,template=False,amd=False):
+def render(cmd,template=False,amd=False,kernel=None):
     if not cmd or any(c in cmd for c in '\n\r\x00\'";$`{}\\#&|<>'):
         raise ValueError('Unsafe GRUB command line')
     if not template and 'androidboot.init_rc=/oem/init.gbrunch.rc' not in cmd:
         raise ValueError('Missing GBRUNCH init configuration')
+    # kernel: None for Google's original kernel, else the release of a GBRUNCH replacement kernel
+    # (tools/build_profile_kernel.py); only the message changes, the entries and files are the same.
+    if kernel is not None and not re.fullmatch(r'[A-Za-z0-9._-]+',kernel):raise ValueError('Unsafe kernel release '+kernel)
+    loading=('Loading original Google kernel and matching modules.' if kernel is None else
+             'Loading GBRUNCH replacement kernel '+kernel+' and its modules.')
     # Both entries share the exact kernel, ramdisk and verbose logger settings.
     # This changes hardware admission only, never partition/source verification.
     config = '''set timeout=10
@@ -63,7 +73,7 @@ set default=0
 serial --unit=0 --speed=115200
 terminal_output console serial
 function gbrunch_boot {
- echo 'Loading original Google kernel and matching modules.'
+ echo \''''+loading+'''\'
  echo 'Android logs: independent GBLOG partition, Android-Logs directory.'
  echo 'Allow three minutes before collecting logs; early failures may not save logs.'
  linux /EFI/GBRUNCH/kernel '''+cmd+'''

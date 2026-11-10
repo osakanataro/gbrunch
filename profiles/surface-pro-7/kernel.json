@@ -1,0 +1,54 @@
+{
+  "release_suffix": "-gbrunch-sp7",
+  "fragments": [
+    "gki-kernel/common.config",
+    "profiles/surface-pro-7/kernel.config"
+  ],
+  "patches": [
+    "gki-kernel/patches/0001-mm-memfd-ashmem-shim.patch",
+    "gki-kernel/patches/0002-x86-gbrunch-avxvnni-builtin.patch",
+    "gki-kernel/patches/0003-linux-surface-surface-sam.patch",
+    "gki-kernel/patches/0004-linux-surface-surface-button.patch",
+    "gki-kernel/patches/0005-linux-surface-surface-gpe.patch",
+    "gki-kernel/patches/0006-linux-surface-ipts-ack-6.18.patch",
+    "gki-kernel/patches/0007-media-intel-backport-ipu-drivers-from-media-next-27285b09.patch",
+    "gki-kernel/patches/0008-media-ipu6-Add-IPU4P-hardware-identification.patch",
+    "gki-kernel/patches/0009-media-ipu6-Add-IPU4P-MMU-support.patch",
+    "gki-kernel/patches/0010-media-ipu6-Add-IPU4P-buttress-support.patch",
+    "gki-kernel/patches/0011-media-ipu6-Add-IPU4P-ISYS-firmware-ABI-definitions.patch",
+    "gki-kernel/patches/0012-media-ipu6-Support-DMEM-based-SysCom-in-ipu6-fw-com.patch",
+    "gki-kernel/patches/0013-media-ipu6-Add-firmware-specific-ISYS-response-dispa.patch",
+    "gki-kernel/patches/0014-media-ipu6-Add-IPU4P-ISYS-firmware-operations.patch",
+    "gki-kernel/patches/0015-media-ipu6-Add-IPU4P-CSI-2-register-definitions.patch",
+    "gki-kernel/patches/0016-media-ipu6-Add-IPU4P-ISYS-ISR-handling.patch",
+    "gki-kernel/patches/0017-media-ipu6-Add-IPU4P-CSI-PHY-driver.patch",
+    "gki-kernel/patches/0018-media-ipu6-Fix-Surface-Pro-7-CSI-2-capture-timing.patch",
+    "gki-kernel/patches/0019-media-ipu6-Enable-IPU4P-PCI-device.patch",
+    "gki-kernel/patches/0020-gbrunch-media-next-ipu-and-sensors-on-ack-6.18.patch",
+    "gki-kernel/patches/0021-gbrunch-ipu6-dynamic-debug.patch",
+    "gki-kernel/patches/0022-gbrunch-ov8865-pixel-rate-and-vblank.patch",
+    "gki-kernel/patches/0023-gbrunch-ov8865-fine-analogue-gain.patch",
+    "gki-kernel/patches/0024-gbrunch-ipu4p-no-packed-raw.patch"
+  ],
+  "ramdisk_modules": [
+    "i915"
+  ],
+  "required": {
+    "RUST": "n",
+    "MEMFD_ASHMEM_SHIM": "y",
+    "GBRUNCH_AVXVNNI_EMU": "y",
+    "ANDROID_BINDER_IPC": "y",
+    "DMABUF_HEAPS_SYSTEM": "y",
+    "DRM_I915": "m",
+    "SURFACE_AGGREGATOR": "m",
+    "IWLMVM": "m",
+    "SND_SOC_SOF_ICELAKE": "m",
+    "SERIAL_8250_RUNTIME_UARTS": "4",
+    "HID_IPTS": "m",
+    "VIDEO_INTEL_IPU6": "m",
+    "IPU_BRIDGE": "m",
+    "VIDEO_OV5693": "m",
+    "VIDEO_OV8865": "m",
+    "INTEL_SKL_INT3472": "m"
+  }
+}

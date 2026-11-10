@@ -3,8 +3,8 @@
 #
 #   camera/build.sh WORK          WORK: an empty or previous work directory (about 3 GB)
 #
-# Downloads (all pinned and verified): Android NDK r30, upstream libcamera at df8e348d (v0.8.0) plus
-# camera/patches/0001-gbrunch-android.patch, libyuv at the libcamera wrap revision, libjpeg-turbo 3.2.1,
+# Downloads (all pinned and verified): Android NDK r30 (tools/fetch-android-ndk.sh; GBRUNCH_NDK shares one), upstream libcamera at df8e348d (v0.8.0) plus
+# camera/patches/*.patch (0001 Android build, 0002 ov5693/ov8865 sensor delays, 0003 native orientation, 0004 AGC flicker period, 0005 log-levels file, 0006 binned max width, 0007 full-width source), libyuv at the libcamera wrap revision, libjpeg-turbo 3.2.1,
 # libexif 0.6.26, and meson/ninja into a Python venv. libexif is compiled directly with a hand-written
 # config.h (no configure script is run). Output: WORK/out, the --camera directory of
 # tools/prepare_profile_assets.py:
@@ -19,8 +19,6 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 W=$(mkdir -p "${1:?usage: camera/build.sh WORK}" && cd "$1" && pwd)
 D=$W/downloads; mkdir -p "$D"
 
-NDK_URL=https://dl.google.com/android/repository/android-ndk-r30-linux.zip
-NDK_SHA256=753611f410d002cfcd3f3dc2ef49aad532089d3180b436c060a90bf0fcb64df2
 LIBCAMERA_URL=https://git.libcamera.org/libcamera/libcamera.git
 LIBCAMERA_COMMIT=df8e348d64b4932a0676256ed24f0da3ee9438bc
 JPEG_URL=https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/3.2.1/libjpeg-turbo-3.2.1.tar.gz
@@ -40,13 +38,13 @@ fetch() {  # url sha256
 # Tools and sources
 [ -x "$W/venv/bin/meson" ] || { python3 -m venv "$W/venv"; "$W/venv/bin/pip" -q install meson==1.12.1 ninja==1.13.2 jinja2 pyyaml ply; }
 export PATH=$W/venv/bin:$PATH
-fetch $NDK_URL $NDK_SHA256
-[ -d "$W/android-ndk-r30" ] || unzip -q "$D/android-ndk-r30-linux.zip" -d "$W"
-N=$W/android-ndk-r30/toolchains/llvm/prebuilt/linux-x86_64
+# Android NDK r30: GBRUNCH_NDK (shared, see tools/fetch-android-ndk.sh) or WORK/android-ndk-r30.
+NDK=$("$HERE/../tools/fetch-android-ndk.sh" "${GBRUNCH_NDK:-$W/android-ndk-r30}")
+N=$NDK/toolchains/llvm/prebuilt/linux-x86_64
 if [ ! -d "$W/libcamera" ]; then
 	git clone -q "$LIBCAMERA_URL" "$W/libcamera"
 	git -C "$W/libcamera" checkout -q "$LIBCAMERA_COMMIT"
-	git -C "$W/libcamera" apply "$HERE/patches/0001-gbrunch-android.patch"
+	for p in "$HERE"/patches/*.patch; do git -C "$W/libcamera" apply "$p"; done
 	echo "0.8.0+gbrunch-${LIBCAMERA_COMMIT:0:8}" > "$W/libcamera/.tarball-version"  # no build-time date
 	# meson reports failure for libyuv (a cmake subproject, no meson.build); check the result instead.
 	(cd "$W/libcamera" && meson subprojects download libyuv libyaml >/dev/null || true)
@@ -57,7 +55,7 @@ fetch $EXIF_URL $EXIF_SHA256
 
 # Static dependencies in WORK/deps
 P=$W/deps; mkdir -p "$P/lib/pkgconfig" "$P/include" "$P/stub" "$W/deps-build"
-TC=(-DCMAKE_TOOLCHAIN_FILE=$W/android-ndk-r30/build/cmake/android.toolchain.cmake -DANDROID_ABI=x86_64
+TC=(-DCMAKE_TOOLCHAIN_FILE=$NDK/build/cmake/android.toolchain.cmake -DANDROID_ABI=x86_64
     -DANDROID_PLATFORM=android-35 -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=ON
     -G Ninja -DCMAKE_MAKE_PROGRAM=$W/venv/bin/ninja)
 if [ ! -f "$P/lib/libjpeg.a" ]; then
@@ -125,6 +123,8 @@ endian = 'little'
 pkg_config_libdir = ['$P/lib/pkgconfig']
 EOF
 B=$W/build-hal
+# The cross file names the NDK path: set the build directory up again when the NDK moved (GBRUNCH_NDK).
+[ "$(cat "$B/.gbrunch-ndk" 2>/dev/null)" = "$NDK" ] || rm -rf "$B"
 [ -d "$B" ] || meson setup "$B" "$W/libcamera" --cross-file "$W/android-hal.ini" \
 	--prefix=/vendor --libdir=lib64/libcamera --sysconfdir=lib64/libcamera/etc --datadir=lib64/libcamera/share \
 	--libexecdir=lib64/libcamera/libexec -Dpipelines=simple -Dipas=softisp -Dandroid=enabled \
@@ -132,6 +132,7 @@ B=$W/build-hal
 	-Ddocumentation=disabled -Dudev=disabled -Dv4l2=false -Dlc-compliance=disabled -Dpycamera=disabled \
 	-Dtracing=disabled -Dlibdw=disabled -Dlibunwind=disabled -Dsoftisp-gpu=disabled -Dbuildtype=release >/dev/null
 ninja -C "$B" >/dev/null
+echo "$NDK" > "$B/.gbrunch-ndk"
 rm -rf "$W/stage" "$W/out"; DESTDIR=$W/stage ninja -C "$B" install >/dev/null
 S=$W/stage/vendor/lib64/libcamera
 mkdir -p "$W/obj"; cp "$HERE/src/gbcam_probe.cpp" "$HERE/src/camera_gbrunch_trampoline.c" "$W/obj/"

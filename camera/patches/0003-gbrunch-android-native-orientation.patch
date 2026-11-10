@@ -1,0 +1,50 @@
+From 88d9b315756158746877311346140b092152f8ea Mon Sep 17 00:00:00 2001
+From: GBRUNCH <gbrunch@invalid>
+Date: Tue, 10 Nov 2026 19:04:07 +0900
+Subject: [PATCH] android: Keep frames in the sensor's native orientation
+
+The HAL reports the mounting rotation in android.sensor.orientation but
+left CameraConfiguration::orientation at Rotate0, so the pipeline also
+undid the rotation with sensor flips and apps rotated the frames a second
+time. Request the mounting orientation (orientationFromRotation() of
+properties::Rotation, as CameraSensor computes it), which makes the
+combined transform the identity and the reported orientation correct.
+Seen on the Surface Pro 7 (sensors at 180 degrees, GBRUNCH, 2026-11-10).
+---
+ src/android/camera_device.cpp | 16 ++++++++++++++++
+ 1 file changed, 16 insertions(+)
+
+diff --git a/src/android/camera_device.cpp b/src/android/camera_device.cpp
+index d0606eb..88bf40c 100644
+--- a/src/android/camera_device.cpp
++++ b/src/android/camera_device.cpp
+@@ -24,6 +24,7 @@
+ #include <libcamera/fence.h>
+ #include <libcamera/formats.h>
+ #include <libcamera/geometry.h>
++#include <libcamera/orientation.h>
+ #include <libcamera/property_ids.h>
+ 
+ #include "system/graphics.h"
+@@ -548,6 +549,21 @@ int CameraDevice::configureStreams(camera3_stream_configuration_t *stream_list)
+ 		return -EINVAL;
+ 	}
+ 
++	/*
++	 * Keep the frames in the sensor's native orientation. The default,
++	 * Orientation::Rotate0, makes the pipeline undo the mounting rotation
++	 * with sensor flips, while android.sensor.orientation still reports
++	 * that rotation (initializeOrientation()), so apps rotate the already
++	 * upright frames again: upside-down preview on the Surface Pro 7, whose
++	 * sensors are mounted at 180 degrees.
++	 */
++	const auto &rotation = camera_->properties().get(properties::Rotation);
++	if (rotation) {
++		std::optional<Orientation> native = orientationFromRotation(*rotation);
++		if (native)
++			config->orientation = *native;
++	}
++
+ 	/*
+ 	 * Clear and remove any existing configuration from previous calls, and
+ 	 * ensure the required entries are available without further

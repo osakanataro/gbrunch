@@ -1,0 +1,58 @@
+<?xml version='1.0' encoding='utf-8'?>
+<audio_config>
+	<!-- GBRUNCH surface-pro-7: SOF sof-hda-generic (IPC3, no DMIC in NHLT) on 8086:34c8, Realtek ALC274.
+	PCMs of the skl_hda_dsp_generic card: 0 HDA Analog (speaker/headphone out, internal and headset mic in),
+	3-5 HDMI1-3, 31 HDA Analog Deep Buffer (device log 2026-11-10). The internal microphones sit on the codec,
+	so InternalMic captures from the analog PCM; the 3.5 mm jack shares that PCM and is switched by DRAS
+	through the "sof-hda-dsp Headphone" and "sof-hda-dsp Mic" jack input devices (names from the device).
+	DRAS requires JackSwitch in a Headphone section (2 = SW_HEADPHONE_INSERT, as in Ruby); without it the whole
+	file failed to parse and nothing played (2026-11-10). Mic sections take no JackSwitch, as in Ruby.
+	Section fields follow Ruby's config. -->
+	<SoundCardName>hw:sofhdadsp</SoundCardName>
+	<HiFi>
+		<Headphone>
+			<PlaybackPCM>hw:sofhdadsp,0</PlaybackPCM>
+			<JackDev>sof-hda-dsp Headphone</JackDev>
+			<JackSwitch>2</JackSwitch>
+			<DSPLatency>0</DSPLatency>
+		</Headphone>
+		<Mic>
+			<CapturePCM>hw:sofhdadsp,0</CapturePCM>
+			<JackDev>sof-hda-dsp Mic</JackDev>
+			<CaptureChannelMap>
+				<FL>0</FL>
+				<FR>1</FR>
+			</CaptureChannelMap>
+			<IntrinsicSensitivity>-2600</IntrinsicSensitivity>
+			<DSPLatency>0</DSPLatency>
+		</Mic>
+		<InternalMic>
+			<CapturePCM>hw:sofhdadsp,0</CapturePCM>
+			<CaptureChannelMap>
+				<FL>0</FL>
+				<FR>1</FR>
+			</CaptureChannelMap>
+			<IntrinsicSensitivity>-2600</IntrinsicSensitivity>
+			<DSPLatency>0</DSPLatency>
+		</InternalMic>
+		<Speaker>
+			<PlaybackPCM>hw:sofhdadsp,0</PlaybackPCM>
+			<DSPLatency>0</DSPLatency>
+		</Speaker>
+		<HDMI1>
+			<PlaybackPCM>hw:sofhdadsp,3</PlaybackPCM>
+			<JackDev>sof-hda-dsp HDMI/DP,pcm=3</JackDev>
+			<PlaybackChannels>2</PlaybackChannels>
+		</HDMI1>
+		<HDMI2>
+			<PlaybackPCM>hw:sofhdadsp,4</PlaybackPCM>
+			<JackDev>sof-hda-dsp HDMI/DP,pcm=4</JackDev>
+			<PlaybackChannels>2</PlaybackChannels>
+		</HDMI2>
+		<HDMI3>
+			<PlaybackPCM>hw:sofhdadsp,5</PlaybackPCM>
+			<JackDev>sof-hda-dsp HDMI/DP,pcm=5</JackDev>
+			<PlaybackChannels>2</PlaybackChannels>
+		</HDMI3>
+	</HiFi>
+</audio_config>

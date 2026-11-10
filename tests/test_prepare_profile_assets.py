@@ -73,6 +73,8 @@ class ProfileAssetTests(unittest.TestCase):
         self.assertIn('linux /EFI/GBRUNCH/kernel CMDLINE',cfg);self.assertNotIn('restricted to the tested HP',cfg)
         # The kit's assemble_native_android.py renders grub.cfg from the menu module beside it.
         self.assertEqual((out/'googlebook_boot_menu.py').read_bytes(),(pathlib.Path(__file__).resolve().parents[1]/'tools/googlebook_boot_menu.py').read_bytes())
+        self.assertEqual((out/'assemble_native_android.py').read_bytes(),(pathlib.Path(__file__).resolve().parents[1]/'tools/assemble_native_android.py').read_bytes())
+        self.assertNotIn('replacement_kernel',m)
         if shutil.which('grub-script-check'):subprocess.run(['grub-script-check',str(out/'native-grub.cfg')],check=True)
         self.assertEqual({k:sha((self.kit/k).read_bytes()) for k in self.before},self.before,'source kit modified')
     def test_refuses_existing_output_and_bad_firmware(self):
@@ -97,8 +99,9 @@ class PinnedProfileTests(unittest.TestCase):
         import dualboot_installer
         self.assertEqual(dualboot_installer.COMPAT_HASH,ppa.BASE_COMPAT)
         # Exactly V7 plus each profile's current image: superseded development images are not accepted.
+        # A profile whose image is not pinned yet (compat_sha256 None) is not installable yet either.
         self.assertEqual(set(dualboot_installer.COMPAT_HASHES),
-                         {ppa.BASE_COMPAT}|{p['compat_sha256'] for p in ppa.PROFILES.values()})
+                         {ppa.BASE_COMPAT}|{p['compat_sha256'] for p in ppa.PROFILES.values() if p['compat_sha256']})
     def test_boot_menu_admits_profile_board_only_with_its_cmdline(self):
         import googlebook_boot_menu as menu
         for name,p in ppa.PROFILES.items():

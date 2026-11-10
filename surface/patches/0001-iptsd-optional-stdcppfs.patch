@@ -1,0 +1,20 @@
+From: GBRUNCH <https://github.com/osakanataro/gbrunch>
+Subject: [PATCH] meson: libstdc++fs is optional (libc++ / Android NDK has no such library)
+
+Applied to linux-surface/iptsd 106f944ac097f8eb779bdfee0487d58ae853c375 (v3.1.1) by surface/build-iptsd.sh.
+---
+diff --git a/src/meson.build b/src/meson.build
+index 07c92c0..b52280b 100644
+--- a/src/meson.build
++++ b/src/meson.build
+@@ -95,8 +95,8 @@ spdlog = dependency(
+ 	],
+ )
+ 
+-# Find libstdc++fs for older GCC
+-stdcppfs = cpp.find_library('stdc++fs')
++# Find libstdc++fs for older GCC (absent with libc++: Android NDK)
++stdcppfs = cpp.find_library('stdc++fs', required: false)
+ 
+ # Default dependencies
+ default_deps = [

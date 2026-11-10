@@ -1,0 +1,46 @@
+From 8a39f067293a53f940293a0a7b8d07132fc09858 Mon Sep 17 00:00:00 2001
+From: GBRUNCH <gbrunch@invalid>
+Date: Tue, 10 Nov 2026 19:03:33 +0900
+Subject: [PATCH] libcamera: sensor: Add ov5693 and ov8865 sensor delays
+
+Without them libcamera assumes unverified defaults (gain applied after one
+frame) while these OmniVision sensors apply exposure and gain after two
+frames, so the software ISP's AGC overshoots and the brightness keeps
+oscillating (Surface Pro 7 rear camera, GBRUNCH, 2026-11-10). Values as in
+I232826/surface-kit libcamera/patches/0006.
+---
+ src/libcamera/sensor/camera_sensor_properties.cpp | 14 ++++++++++++--
+ 1 file changed, 12 insertions(+), 2 deletions(-)
+
+diff --git a/src/libcamera/sensor/camera_sensor_properties.cpp b/src/libcamera/sensor/camera_sensor_properties.cpp
+index 20cfd0b..cc931ed 100644
+--- a/src/libcamera/sensor/camera_sensor_properties.cpp
++++ b/src/libcamera/sensor/camera_sensor_properties.cpp
+@@ -493,7 +493,12 @@ const CameraSensorProperties *CameraSensorProperties::get(const std::string &sen
+ 				 * Rolling Bar".
+ 				 */
+ 			},
+-			.sensorDelays = { },
++			.sensorDelays = {
++				.exposureDelay = 2,
++				.gainDelay = 2,
++				.vblankDelay = 2,
++				.hblankDelay = 2
++			},
+ 		} },
+ 		{ "ov64a40", {
+ 			.unitCellSize = { 1008, 1008 },
+@@ -551,7 +556,12 @@ const CameraSensorProperties *CameraSensorProperties::get(const std::string &sen
+ 				 * 5: "Color squares with rolling bar"
+ 				 */
+ 			},
+-			.sensorDelays = { },
++			.sensorDelays = {
++				.exposureDelay = 2,
++				.gainDelay = 2,
++				.vblankDelay = 2,
++				.hblankDelay = 2
++			},
+ 		} },
+ 		{ "ov9281", {
+ 			.unitCellSize = { 3000, 3000 },

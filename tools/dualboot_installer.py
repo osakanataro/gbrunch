@@ -13,7 +13,8 @@ COMPAT_HASH='77cb6ec0e399a944a020b5d7d55d03dbd1bb5a2ba01012be91d315987ab69722'
 # derived from it by tools/prepare_profile_assets.py (deterministic e2fsprogs output). Kept equal to
 # PROFILES[*]['compat_sha256'] by tests/test_prepare_profile_assets.py; superseded images are refused.
 COMPAT_HASHES={COMPAT_HASH:'V7',
- 'f2478ea67705ea3f1f3dcbfd07e1dec0cf7f677ab9f126114d6bdec01a64a4f7':'V7 + hp-dragonfly-g4 profile + audio + ac.ko + CS35L41 speakers (external boost fix, error IRQ)'}
+ 'f2478ea67705ea3f1f3dcbfd07e1dec0cf7f677ab9f126114d6bdec01a64a4f7':'V7 + hp-dragonfly-g4 profile + audio + ac.ko + CS35L41 speakers (external boost fix, error IRQ)',
+ '580a190c3d2d7377c9745531b58c1a0be5d6a2fd0b1a97c4914b63459754565b':'V7 + surface-pro-7 profile (replacement kernel 6.18.21-gbrunch-sp7 modules, Wi-Fi/SOF/RTL8153 firmware, DRAS audio with jack, iptsd, tinymix, sys.use_memfd, IPU4P camera, density 240, camera fixes, anti-flicker, camera log levels, ov8865 pixel rate, camera debug logging v3, ov8865 fine gain, ISYS debug, filtered kernel log, IPU4P unpacked RAW, binned max width, full-width source)'}
 SOURCE_GUIDS={'GBRUNCH':'4ab7c001-7400-4bab-b412-43cbd52b9fb1','GBVENDOR':'4ab7c002-7400-4bab-b412-43cbd52b9fb1','GBLOG':'4ab7c003-7400-4bab-b412-43cbd52b9fb1'}
 EXPECTED={'userdata','KERN-A','super','KERN-B','ROOT-B','KERN-C','ROOT-C','OEM','ota_recovery_a','ota_recovery_b','EFI-SYSTEM','boot_a','boot_b','vbmeta_a','vbmeta_b','metadata','init_boot_a','init_boot_b','vendor_boot_a','vendor_boot_b','pvmfw_a','pvmfw_b','misc','RWFW-A','RWFW-B','recovery_a','recovery_b','desktop_security_persist','desktop_security_storage','frp_persist','GBRUNCH','GBVENDOR','GBLOG'}
 def require(value,message):

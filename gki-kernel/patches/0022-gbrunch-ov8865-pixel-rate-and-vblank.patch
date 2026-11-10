@@ -1,0 +1,53 @@
+From: GBRUNCH
+Subject: [PATCH] media: ov8865: report SCLK as pixel rate, reset vblank on mode change
+
+PIXEL_RATE carried the MIPI output rate (288 MHz on the Surface Pro 7: 360 MHz
+link, 4 lanes, 10 bits) while HTS/VTS count SCLK cycles (144 MHz, 72 MHz in
+the binned modes). libcamera computes the line time from it, so exposure
+times, frame durations and the anti-flicker rounding were off by 2-4x. Report
+SCLK. (The rear camera's video mode, a fixed 30 fps request, gave a CSI-2 FIFO
+overflow and no frames, 2026-11-10; the wrong frame timing is the suspected
+cause, not yet confirmed.)
+
+Also set the new mode's default vblank on an active format change;
+__v4l2_ctrl_modify_range() only moves the default and keeps a value left over
+from another mode.
+
+Same changes as I232826/surface-kit camera/patches/ov8865/0006 and 0003
+(GPL-2.0).
+
+--- a/drivers/media/i2c/ov8865.c	2026-11-10 20:08:42.957444360 +0900
++++ b/drivers/media/i2c/ov8865.c	2026-11-10 20:08:42.971535942 +0900
+@@ -2289,7 +2289,17 @@
+ 	lanes_count = bus_mipi_csi2->num_data_lanes;
+ 	mipi_pixel_rate = mipi_clk_rate * 2 * lanes_count / bits_per_sample;
+ 
+-	__v4l2_ctrl_s_ctrl_int64(ctrls->pixel_rate, mipi_pixel_rate);
++	/*
++	 * GBRUNCH: HTS and VTS count SCLK cycles (144 MHz native, 72 MHz with
++	 * binning, see the PLL2 configs), not pixels at the MIPI output rate.
++	 * Userspace derives the line time from this control: with the MIPI
++	 * rate libcamera took a 1632x1224 line for 6.7 us instead of 26.7 us,
++	 * so exposure times, frame durations and anti-flicker rounding were
++	 * 4x off. The CSI-2 receiver uses the LINK_FREQ control instead.
++	 */
++	dev_dbg(sensor->dev, "MIPI pixel rate %lld\n", mipi_pixel_rate);
++	__v4l2_ctrl_s_ctrl_int64(ctrls->pixel_rate,
++				 mode->pll2_binning ? 72000000 : 144000000);
+ 
+ 	return 0;
+ }
+@@ -2754,6 +2764,13 @@
+ 	__v4l2_ctrl_modify_range(sensor->ctrls.vblank, OV8865_TIMING_MIN_VTS,
+ 				 OV8865_TIMING_MAX_VTS - mode->output_size_y,
+ 				 1, mode->vts - mode->output_size_y);
++	/*
++	 * GBRUNCH: modify_range() only moves the default. Start a new active
++	 * mode at its own blanking instead of one left over from another mode.
++	 */
++	if (format->which == V4L2_SUBDEV_FORMAT_ACTIVE && !ret)
++		__v4l2_ctrl_s_ctrl(sensor->ctrls.vblank,
++				   mode->vts - mode->output_size_y);
+ 
+ 	hblank = mode->hts - mode->output_size_x;
+ 	__v4l2_ctrl_modify_range(sensor->ctrls.hblank, hblank, hblank, 1,

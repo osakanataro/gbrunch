@@ -1,0 +1,37 @@
+From 06ebed588e21f97b90b14e39fd48e090e4adb3ab Mon Sep 17 00:00:00 2001
+From: GBRUNCH <gbrunch@invalid>
+Date: Tue, 10 Nov 2026 21:46:20 +0900
+Subject: [PATCH] android: Round the halved maximum width down to a multiple of
+ 4
+
+The GBRUNCH maximum resolution is half the full-mode output, rounded to a
+multiple of 2. With unpacked RAW10 capture the Surface Pro 7's front camera
+outputs up to 2588x1944, so the maximum became 1294x972, while its 2x2
+binned mode (1296x972) only gives up to 1292x972 through the software ISP.
+The simple pipeline then chose the full 2592x1944 mode for the camera app's
+1294x972 stream and cropped the middle: half the field of view (GBRUNCH,
+2026-11-10). A multiple of 4 gives 1292x972 (front) and 1628x1224 (rear).
+---
+ src/android/camera_capabilities.cpp | 9 ++++++++-
+ 1 file changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/src/android/camera_capabilities.cpp b/src/android/camera_capabilities.cpp
+index 5016365..0ab00b5 100644
+--- a/src/android/camera_capabilities.cpp
++++ b/src/android/camera_capabilities.cpp
+@@ -509,7 +509,14 @@ int CameraCapabilities::initializeStreamConfigurations()
+ 	 * configures a maximum-size JPEG stream, so a full-resolution maximum keeps the
+ 	 * whole session at full resolution (hi556: ~1.5 cores instead of ~0.4).
+ 	 */
+-	const Size maxRes(cfg.size.width / 2 & ~1u, cfg.size.height / 2 & ~1u);
++	/*
++	 * The width is rounded down to a multiple of 4: half the full-mode
++	 * output width can exceed what the software ISP outputs from the
++	 * binned mode (Surface Pro 7: 2588 / 2 = 1294 against 1292 from
++	 * 1296x972 unpacked RAW10), and the pipeline would then pick the full
++	 * mode and crop half the field of view.
++	 */
++	const Size maxRes(cfg.size.width / 2 & ~3u, cfg.size.height / 2 & ~1u);
+ #else
+ 	const Size maxRes = cfg.size;
+ #endif

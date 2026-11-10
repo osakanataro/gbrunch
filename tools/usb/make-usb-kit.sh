@@ -25,8 +25,11 @@ fi
 echo "Checking the kit files..."
 (cd "$here" && sha256sum -c --quiet SHA256SUMS) || { echo "Kit files do not match SHA256SUMS; download the kit again"; exit 1; }
 
+[ -f "$assets/kit.json" ] || { echo "$assets has no kit.json"; exit 1; }
+profile=$(python3 "$here/usb/kit_profile.py" "$assets" get profile); image=$(python3 "$here/usb/kit_profile.py" "$assets" get image)
+vendor=$(python3 "$here/usb/kit_profile.py" "$assets" get vendor_erofs)
 mkdir -p "$out"; out=$(realpath "$out")
-kit=$out/usb-kit; img=$kit/googlebook-dragonfly.img
+kit=$out/usb-kit; img=$kit/$image
 [ ! -e "$img" ] || { echo "$img already exists; remove it or use another OUTDIR"; exit 1; }
 need=$((50*1024*1024))  # KiB; recovery zip 7.8 GB + raw 19 GB (sparse) + image 19 GB
 [ -n "$zip" ] && need=$((42*1024*1024))
@@ -40,13 +43,21 @@ echo "Building the image (downloads 7.8 GB unless --recovery-zip is given)..."
 python3 "$assets/assemble_native_android.py" "${src[@]}" --cache "$out/recovery-cache" \
 	--assets "$assets" --format raw --output "$img"
 mv "$img.build-vm.log" "$out/" 2>/dev/null || true
-mv "$img.manifest.json" "$out/" 2>/dev/null || true
+mv "$img.manifest.json" "$out/$image.manifest.json"
 
 echo "Writing the image hash..."
-(cd "$kit" && sha256sum googlebook-dragonfly.img > googlebook-dragonfly.img.sha256)
+(cd "$kit" && sha256sum "$image" > "$image.sha256")
+echo "Extracting the GBVENDOR image for apply-vendor-update.sh..."
+python3 - "$img" "$out/$image.manifest.json" "$kit/$vendor" <<'EOF'
+import json,sys,hashlib,subprocess
+img,manifest,out=sys.argv[1:]
+m=json.load(open(manifest));gv=[p for p in m['appended_partitions'] if p['name']=='GBVENDOR'][0]
+subprocess.run(['dd','if='+img,'of='+out,'bs=1M','iflag=skip_bytes,count_bytes','skip=%d'%gv['offset'],'count=%d'%m['vendor']['vendor_bytes'],'status=none'],check=True)
+assert hashlib.file_digest(open(out,'rb'),'sha256').hexdigest()==m['vendor']['vendor_sha256'],'GBVENDOR hash mismatch'
+EOF
 mkdir -p "$kit/usb"
-cp "$here"/usb/*.sh "$kit/usb/"
-cp "$here/README-usb-kit.txt" "$kit/README.txt"
+cp "$here"/usb/*.sh "$here/usb/kit_profile.py" "$kit/usb/"
+python3 "$here/usb/kit_profile.py" "$assets" render "$here/README-usb-kit.txt" "$kit/README.txt"
 echo
 echo "Done: $kit"
 echo "Copy that folder to a data USB stick formatted as exFAT or ext4 (the image is larger than 4 GB),"

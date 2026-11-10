@@ -1,0 +1,27 @@
+From: GBRUNCH
+Subject: [PATCH] media: ov8865: analogue gain in 1/128 steps
+
+V4L2_CID_ANALOGUE_GAIN was registered with a step of 128, a whole 1x, while
+the gain register takes 1/128 steps. The control framework rounded every
+request: on the Surface Pro 7 the rear camera's auto exposure asked for gains
+between 1.4x and 1.8x and the sensor got 1x or 2x, so the preview brightness
+pumped about once a second (GBRUNCH, 2026-11-10). Same change as
+I232826/surface-kit camera/patches/ov8865/0004 (GPL-2.0).
+
+--- a/drivers/media/i2c/ov8865.c	2026-11-10 21:07:50.231845785 +0900
++++ b/drivers/media/i2c/ov8865.c	2026-11-10 21:07:50.244307294 +0900
+@@ -2538,7 +2538,13 @@
+ 
+ 	/* Gain */
+ 
+-	v4l2_ctrl_new_std(handler, ops, V4L2_CID_ANALOGUE_GAIN, 128, 2048, 128,
++	/*
++	 * GBRUNCH: the gain register (0x3508/0x3509, 0x80 = 1x) takes 1/128
++	 * steps. A control step of 128 made the control framework round every
++	 * request to a whole multiple of 1x, so auto exposure asking for 1.4x
++	 * got 1x and 1.6x got 2x and the image pumped between them.
++	 */
++	v4l2_ctrl_new_std(handler, ops, V4L2_CID_ANALOGUE_GAIN, 128, 2048, 1,
+ 			  128);
+ 
+ 	/* White Balance */

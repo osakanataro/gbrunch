@@ -1,0 +1,238 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * GBRUNCH: run Ruby's user space on CPUs without AVX-VNNI (Ice Lake, Tiger Lake).
+ *
+ * Ruby's binaries are compiled with VEX-encoded AVX-VNNI as a baseline (init, linker64,
+ * libc++, surfaceflinger...). Those CPUs raise #UD on VPDPBUSD, VPDPBUSDS, VPDPWSSD and
+ * VPDPWSSDS. This module hooks the x86 die notifier chain, which do_error_trap() runs
+ * before SIGILL is delivered, decodes the instruction, computes it in C on the task's live
+ * vector registers (they are still in hardware at this point: the trap came from user mode
+ * and IRQs are off, so nothing has touched them) and advances RIP. Everything else returns
+ * NOTIFY_DONE and still gets SIGILL.
+ *
+ * Only the four VEX.0F38 opcodes 50-53 with W=0 are handled, with register, [base+disp],
+ * [base+index*scale+disp] and RIP-relative operands in 64-bit mode. Legacy prefixes
+ * (segment override, address size) are not supported and are declined.
+ *
+ * Stock GKI exports used: register_die_notifier, boot_cpu_data, __get_user_1/8.
+ */
+#include <linux/module.h>
+#include <linux/kdebug.h>
+#include <linux/notifier.h>
+#include <linux/uaccess.h>
+#include <linux/unaligned.h>
+#include <linux/sched.h>
+#include <asm/traps.h>
+#include <asm/ptrace.h>
+#include <asm/processor.h>
+#include <asm/cpufeature.h>
+
+static unsigned long emulated, declined;
+module_param(emulated, ulong, 0444);
+MODULE_PARM_DESC(emulated, "VEX AVX-VNNI instructions emulated");
+module_param(declined, ulong, 0444);
+MODULE_PARM_DESC(declined, "user #UD traps left to SIGILL");
+
+#define SLOT 64	/* one zmm per slot; the ymm path uses the first 32 bytes */
+
+struct vnni {
+	u8 op, ymm, dst, src1, src2, len;
+	bool mem;
+	unsigned long addr;
+};
+
+static unsigned long reg_val(const struct pt_regs *r, int n)
+{
+	switch (n) {
+	case 0: return r->ax;  case 1: return r->cx;  case 2: return r->dx;  case 3: return r->bx;
+	case 4: return r->sp;  case 5: return r->bp;  case 6: return r->si;  case 7: return r->di;
+	case 8: return r->r8;  case 9: return r->r9;  case 10: return r->r10; case 11: return r->r11;
+	case 12: return r->r12; case 13: return r->r13; case 14: return r->r14; default: return r->r15;
+	}
+}
+
+/* Returns 0 on success; page faults are disabled by the caller. */
+static int decode(struct pt_regs *regs, struct vnni *v)
+{
+	u8 b[11];
+	int i, n, mod, rm, R, X, B;
+	s32 disp;
+
+	for (n = 0; n < (int)sizeof(b); n++)
+		if (get_user(b[n], (u8 __user *)(regs->ip + n)))
+			break;
+	if (n < 5 || b[0] != 0xC4)
+		return -1;
+	R = !(b[1] & 0x80); X = !(b[1] & 0x40); B = !(b[1] & 0x20);
+	if ((b[1] & 0x1f) != 2 || (b[2] & 0x80) || (b[2] & 3) != 1)	/* map 0F38, W=0, pp=66 */
+		return -1;
+	v->op = b[3];
+	if (v->op < 0x50 || v->op > 0x53)
+		return -1;
+	v->src1 = (~b[2] >> 3) & 0xf;
+	v->ymm = (b[2] >> 2) & 1;
+	mod = b[4] >> 6; rm = b[4] & 7;
+	v->dst = ((b[4] >> 3) & 7) | (R << 3);
+	v->len = 5; v->mem = mod != 3; v->addr = 0;
+	if (!v->mem) {
+		v->src2 = rm | (B << 3);
+		return 0;
+	}
+	v->src2 = 0;
+	i = 5;
+	if (rm == 4) {
+		int sib, idx, base;
+		if (n < 6)
+			return -1;
+		sib = b[5]; i = 6;
+		idx = ((sib >> 3) & 7) | (X << 3); base = (sib & 7) | (B << 3);
+		if (idx != 4)
+			v->addr += reg_val(regs, idx) << (sib >> 6);
+		if ((sib & 7) == 5 && mod == 0) {
+			if (n < i + 4) return -1;
+			disp = get_unaligned((s32 *)&b[i]); i += 4;
+			v->addr += (unsigned long)(long)disp;
+		} else {
+			v->addr += reg_val(regs, base);
+		}
+	} else if (rm == 5 && mod == 0) {
+		if (n < 9) return -1;
+		disp = get_unaligned((s32 *)&b[5]);
+		v->len = 9;
+		v->addr = regs->ip + 9 + (unsigned long)(long)disp;
+		return 0;
+	} else {
+		v->addr += reg_val(regs, rm | (B << 3));
+	}
+	if (mod == 1) {
+		if (n < i + 1) return -1;
+		v->addr += (unsigned long)(long)(s8)b[i]; i += 1;
+	} else if (mod == 2) {
+		if (n < i + 4) return -1;
+		disp = get_unaligned((s32 *)&b[i]); i += 4;
+		v->addr += (unsigned long)(long)disp;
+	}
+	v->len = i;
+	return 0;
+}
+
+static void compute(u8 op, const u32 *s1, const u32 *s2, u32 *d, int dwords)
+{
+	int i;
+
+	for (i = 0; i < dwords; i++) {
+		s64 sum, r;
+
+		if (op < 0x52) {	/* VPDPBUSD[S]: unsigned bytes of src1 x signed bytes of src2 */
+			const u8 *a = (const u8 *)&s1[i];
+			const s8 *b = (const s8 *)&s2[i];
+			sum = (s64)a[0] * b[0] + (s64)a[1] * b[1] + (s64)a[2] * b[2] + (s64)a[3] * b[3];
+		} else {		/* VPDPWSSD[S]: signed words */
+			const s16 *a = (const s16 *)&s1[i];
+			const s16 *b = (const s16 *)&s2[i];
+			sum = (s64)a[0] * b[0] + (s64)a[1] * b[1];
+		}
+		r = (s64)(s32)d[i] + sum;
+		if (op & 1)
+			r = r > S32_MAX ? S32_MAX : r < S32_MIN ? S32_MIN : r;
+		d[i] = (u32)r;
+	}
+}
+
+#define SAVE16(insn, reg) \
+	asm volatile(insn " %%" reg "0, 0(%0)\n\t"    insn " %%" reg "1, 64(%0)\n\t" \
+		     insn " %%" reg "2, 128(%0)\n\t"  insn " %%" reg "3, 192(%0)\n\t" \
+		     insn " %%" reg "4, 256(%0)\n\t"  insn " %%" reg "5, 320(%0)\n\t" \
+		     insn " %%" reg "6, 384(%0)\n\t"  insn " %%" reg "7, 448(%0)\n\t" \
+		     insn " %%" reg "8, 512(%0)\n\t"  insn " %%" reg "9, 576(%0)\n\t" \
+		     insn " %%" reg "10, 640(%0)\n\t" insn " %%" reg "11, 704(%0)\n\t" \
+		     insn " %%" reg "12, 768(%0)\n\t" insn " %%" reg "13, 832(%0)\n\t" \
+		     insn " %%" reg "14, 896(%0)\n\t" insn " %%" reg "15, 960(%0)" \
+		     : : "r"(buf) : "memory")
+#define LOAD16(insn, reg) \
+	asm volatile(insn " 0(%0), %%" reg "0\n\t"    insn " 64(%0), %%" reg "1\n\t" \
+		     insn " 128(%0), %%" reg "2\n\t"  insn " 192(%0), %%" reg "3\n\t" \
+		     insn " 256(%0), %%" reg "4\n\t"  insn " 320(%0), %%" reg "5\n\t" \
+		     insn " 384(%0), %%" reg "6\n\t"  insn " 448(%0), %%" reg "7\n\t" \
+		     insn " 512(%0), %%" reg "8\n\t"  insn " 576(%0), %%" reg "9\n\t" \
+		     insn " 640(%0), %%" reg "10\n\t" insn " 704(%0), %%" reg "11\n\t" \
+		     insn " 768(%0), %%" reg "12\n\t" insn " 832(%0), %%" reg "13\n\t" \
+		     insn " 896(%0), %%" reg "14\n\t" insn " 960(%0), %%" reg "15" \
+		     : : "r"(buf) : "memory")
+
+/*
+ * With AVX-512 the whole zmm0-15 are saved and restored so that the upper 256 bits of the
+ * untouched registers survive; the VEX instruction itself zeroes them in its destination.
+ */
+static void save_vregs(u8 *buf, bool z)
+{
+	if (z) SAVE16("vmovdqu64", "zmm"); else SAVE16("vmovdqu", "ymm");
+}
+
+static void load_vregs(const u8 *buf, bool z)
+{
+	if (z) LOAD16("vmovdqu64", "zmm"); else LOAD16("vmovdqu", "ymm");
+}
+
+static int ud_notify(struct notifier_block *nb, unsigned long val, void *data)
+{
+	struct die_args *args = data;
+	struct pt_regs *regs = args->regs;
+	struct vnni v;
+	u8 buf[16 * SLOT] __aligned(64);
+	u32 operand[8];
+	bool z;
+	int bytes, i, rc;
+
+	if (val != DIE_TRAP || args->trapnr != X86_TRAP_UD || !user_mode(regs) || !user_64bit_mode(regs))
+		return NOTIFY_DONE;
+	pagefault_disable();
+	rc = decode(regs, &v);
+	bytes = v.ymm ? 32 : 16;
+	if (!rc && v.mem) {
+		for (i = 0; i < bytes / 8; i++)
+			if (get_user(((u64 *)operand)[i], (u64 __user *)(v.addr + 8 * i))) {
+				rc = -1;
+				break;
+			}
+	}
+	pagefault_enable();
+	if (rc) {
+		declined++;
+		return NOTIFY_DONE;
+	}
+	z = boot_cpu_has(X86_FEATURE_AVX512F);
+	save_vregs(buf, z);
+	if (!v.mem)
+		memcpy(operand, buf + v.src2 * SLOT, bytes);
+	compute(v.op, (u32 *)(buf + v.src1 * SLOT), operand, (u32 *)(buf + v.dst * SLOT), bytes / 4);
+	memset(buf + v.dst * SLOT + bytes, 0, SLOT - bytes);	/* VEX zeroes the upper bits */
+	load_vregs(buf, z);
+	regs->ip += v.len;
+	emulated++;
+	return NOTIFY_STOP;
+}
+
+static struct notifier_block ud_nb = { .notifier_call = ud_notify, .priority = INT_MAX };
+
+static int __init gbrunch_avxvnni_init(void)
+{
+	if (boot_cpu_has(X86_FEATURE_AVX_VNNI)) {
+		pr_info("GBRUNCH: CPU has AVX-VNNI; emulation not needed, but armed anyway\n");
+	}
+	if (!boot_cpu_has(X86_FEATURE_AVX2))
+		return -ENODEV;
+	pr_info("GBRUNCH: AVX-VNNI emulation armed (%s register save)\n",
+		boot_cpu_has(X86_FEATURE_AVX512F) ? "zmm" : "ymm");
+	return register_die_notifier(&ud_nb);
+}
+module_init(gbrunch_avxvnni_init);
+
+static void __exit gbrunch_avxvnni_exit(void)
+{
+	unregister_die_notifier(&ud_nb);
+}
+module_exit(gbrunch_avxvnni_exit);
+
+MODULE_DESCRIPTION("GBRUNCH: VEX AVX-VNNI emulation for CPUs without it");
+MODULE_LICENSE("GPL");

@@ -1,0 +1,22 @@
+{
+  "profile": "surface-pro-7",
+  "device": "Microsoft Surface Pro 7 (Ice Lake)",
+  "image": "googlebook-sp7.img",
+  "firmware_setup": "Power off; hold Volume Up, press and release Power, keep holding Volume Up until the Surface UEFI appears.",
+  "boot_menu": "Hold Volume Down while pressing Power to boot from USB once, or move \"USB Storage\" to the top of Boot configuration in the UEFI.",
+  "secure_boot": "Surface UEFI -> Security -> Secure Boot -> Change configuration -> None.",
+  "kernel": true,
+  "notes": [
+    "REPLACEMENT KERNEL 6.18.21-gbrunch-sp7 (same ACK revision as Google's kernel): i915 for Gen11 graphics,",
+    "built-in AVX-VNNI emulation, Surface Aggregator (battery), SOF Ice Lake audio, IPTS touch with iptsd.",
+    "Google's kernel modules are not used on this profile.",
+    "GRUB default entry admits SMBIOS vendor 'Microsoft Corporation', product/board 'Surface Pro 7'.",
+    "Cameras: IPU4P front ov5693 / rear ov8865 via libcamera softISP (the Microsoft IPU4P firmware is",
+    "not redistributable: local builds add it with assemble --local-files from surface/fetch-ipu4p-firmware.sh). IR camera, autofocus and suspend are not configured."
+  ],
+  "status": [
+    "2026-11-09/10 on the device: display, setup wizard, touch/pen, Wi-Fi (AX201 Qu-c0), Bluetooth firmware, USB Ethernet,",
+    "battery/charger, speakers, internal microphone, 3.5 mm headphones and headset microphone work.",
+    "Cameras: front and rear photos and video (recording and playback) work; no rear autofocus or IR camera."
+  ]
+}

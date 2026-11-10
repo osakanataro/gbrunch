@@ -1,0 +1,127 @@
+From 3e797ee68d01878b16f2c05b827faf69849f3514 Mon Sep 17 00:00:00 2001
+From: GBRUNCH <gbrunch@invalid>
+Date: Tue, 10 Nov 2026 19:28:05 +0900
+Subject: [PATCH] ipa: libipa: agc: Keep exposure times to whole light flicker
+ periods
+
+LED and fluorescent lamps on mains power pulse at twice the mains
+frequency. ExposureModeHelper::splitExposure() picks any exposure time, so
+each frame catches a different share of the pulses and the image brightness
+flickers (Surface Pro 7 rear ov8865 under 50 Hz LED lighting, GBRUNCH,
+2026-11-10).
+
+Add an optional flickerPeriod (microseconds) to the AgcMeanLuminance tuning
+data. When set, exposure times of at least one period are rounded down to
+whole periods and gain makes up the difference. Absent or 0: unchanged.
+---
+ src/ipa/libipa/agc_mean_luminance.cpp   | 15 ++++++++++-
+ src/ipa/libipa/exposure_mode_helper.cpp | 34 +++++++++++++++++++++++++
+ src/ipa/libipa/exposure_mode_helper.h   |  3 +++
+ 3 files changed, 51 insertions(+), 1 deletion(-)
+
+diff --git a/src/ipa/libipa/agc_mean_luminance.cpp b/src/ipa/libipa/agc_mean_luminance.cpp
+index cdfca47..3d3c63f 100644
+--- a/src/ipa/libipa/agc_mean_luminance.cpp
++++ b/src/ipa/libipa/agc_mean_luminance.cpp
+@@ -475,7 +475,20 @@ int AgcMeanLuminance::parseTuningData(const ValueNode &tuningData)
+ 	if (ret)
+ 		return ret;
+ 
+-	return parseExposureModes(tuningData);
++	ret = parseExposureModes(tuningData);
++	if (ret)
++		return ret;
++
++	/*
++	 * flickerPeriod: the light flicker period in microseconds (10000 for
++	 * 50 Hz mains, 8333 for 60 Hz); exposure times of at least one period
++	 * are kept to whole periods. 0 or absent: off.
++	 */
++	uint32_t flickerPeriod = tuningData["flickerPeriod"].get<uint32_t>().value_or(0);
++	for (auto &[id, helper] : exposureModeHelpers_)
++		helper.setFlickerPeriod(std::chrono::microseconds(flickerPeriod));
++
++	return 0;
+ }
+ 
+ /**
+diff --git a/src/ipa/libipa/exposure_mode_helper.cpp b/src/ipa/libipa/exposure_mode_helper.cpp
+index b3e75f6..db25cbe 100644
+--- a/src/ipa/libipa/exposure_mode_helper.cpp
++++ b/src/ipa/libipa/exposure_mode_helper.cpp
+@@ -7,6 +7,7 @@
+ #include "exposure_mode_helper.h"
+ 
+ #include <algorithm>
++#include <cmath>
+ 
+ #include <libcamera/base/log.h>
+ 
+@@ -209,6 +210,39 @@ double ExposureModeHelper::clampGain(double gain, double *quantizationGain) cons
+  */
+ ExposureModeHelper::Result
+ ExposureModeHelper::splitExposure(utils::Duration exposure) const
++{
++	Result result = splitExposureFree(exposure);
++
++	/*
++	 * Anti-flicker: lamps on mains power pulse at twice the mains
++	 * frequency. An exposure time that is not a whole number of those
++	 * periods catches a different share of each pulse in every frame, so
++	 * the image brightness flickers. When the exposure time is at least one
++	 * period, round it down to whole periods and make up the difference
++	 * with gain. Off unless setFlickerPeriod() was given a period.
++	 */
++	if (flickerPeriod_ <= utils::Duration(0) ||
++	    result.exposureTime < flickerPeriod_ ||
++	    minExposureTime_ == maxExposureTime_)
++		return result;
++
++	double quantGain;
++	double quantGain2;
++	utils::Duration exposureTime =
++		clampExposureTime(std::floor(result.exposureTime / flickerPeriod_) *
++				  flickerPeriod_, &quantGain);
++	double gain = clampGain(exposure / exposureTime, &quantGain2);
++	quantGain *= quantGain2;
++
++	return { exposureTime, gain, quantGain,
++		 exposure / (exposureTime * gain * quantGain) };
++}
++
++/*
++ * splitExposure() without the anti-flicker rounding (the upstream algorithm).
++ */
++ExposureModeHelper::Result
++ExposureModeHelper::splitExposureFree(utils::Duration exposure) const
+ {
+ 	ASSERT(maxExposureTime_);
+ 	ASSERT(maxGain_);
+diff --git a/src/ipa/libipa/exposure_mode_helper.h b/src/ipa/libipa/exposure_mode_helper.h
+index a56e190..4137396 100644
+--- a/src/ipa/libipa/exposure_mode_helper.h
++++ b/src/ipa/libipa/exposure_mode_helper.h
+@@ -37,6 +37,7 @@ public:
+ 	};
+ 
+ 	[[nodiscard]] Result splitExposure(utils::Duration exposure) const;
++	void setFlickerPeriod(utils::Duration period) { flickerPeriod_ = period; }
+ 
+ 	utils::Duration minExposureTime() const { return minExposureTime_; }
+ 	utils::Duration maxExposureTime() const { return maxExposureTime_; }
+@@ -47,6 +48,7 @@ private:
+ 	utils::Duration clampExposureTime(utils::Duration exposureTime,
+ 					  double *quantizationGain = nullptr) const;
+ 	double clampGain(double gain, double *quantizationGain = nullptr) const;
++	Result splitExposureFree(utils::Duration exposure) const;
+ 
+ 	std::vector<utils::Duration> exposureTimes_;
+ 	std::vector<double> gains_;
+@@ -57,6 +59,7 @@ private:
+ 	double minGain_;
+ 	double maxGain_;
+ 	const CameraSensorHelper *sensorHelper_;
++	utils::Duration flickerPeriod_ = {};
+ };
+ 
+ } /* namespace ipa */

@@ -1,0 +1,4 @@
+# libcamera log levels for the camera HAL (camera/patches/0005, read by the libcamera logger; LIBCAMERA_LOG_LEVELS
+# syntax, category:LEVEL). SimplePipeline logs its sensor mode and format choice at configuration time only.
+# Per-frame categories for debugging: V4L2:DEBUG (buffer queue/dequeue), DelayedControls:DEBUG (exposure/gain writes).
+SimplePipeline:DEBUG

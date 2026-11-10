@@ -1,0 +1,51 @@
+From d740c41fac31cf2afed9f5d1e3031aa4f41ed8de Mon Sep 17 00:00:00 2001
+From: GBRUNCH <gbrunch@invalid>
+Date: Tue, 10 Nov 2026 21:52:15 +0900
+Subject: [PATCH] android: Take the source at the full width of the maximum
+ resolution
+
+The software ISP crops rather than scales. When every Android stream was
+smaller than the maximum, the libcamera stream had the Android size, so a
+1280x720 video session on the Surface Pro 7's rear camera (binned mode
+1632x1224) showed only the middle 78% of the width, while the front camera,
+whose 1920x1080 video stream went through the clamp to the maximum, kept the
+full width (GBRUNCH, 2026-11-10). Scale the source to the largest size of the
+same aspect ratio within the maximum for smaller streams too and let the YUV
+post-processors scale down.
+---
+ src/android/camera_device.cpp | 19 ++++++++++++++-----
+ 1 file changed, 14 insertions(+), 5 deletions(-)
+
+diff --git a/src/android/camera_device.cpp b/src/android/camera_device.cpp
+index 88bf40c..3db55b8 100644
+--- a/src/android/camera_device.cpp
++++ b/src/android/camera_device.cpp
+@@ -761,14 +761,23 @@ int CameraDevice::configureStreams(camera3_stream_configuration_t *stream_list)
+ 	for (auto &streamConfig : streamConfigs) {
+ 		Size &size = streamConfig.config.size;
+ 		const Size &maxRes = capabilities_.maxResolution();
+-		if (maxRes.isNull() || (size.width <= maxRes.width && size.height <= maxRes.height))
++		if (maxRes.isNull() || size.isNull())
+ 			continue;
++		/*
++		 * Scale the source to the largest size of the same aspect ratio within the
++		 * maximum, smaller streams too: the software ISP crops rather than scales, so
++		 * a 1280x720 source taken from the rear camera's 1632x1224 binned mode kept
++		 * only the middle 78% of the width. The post-processors scale each Android
++		 * stream from the full-width source.
++		 */
+ 		double scale = std::min(static_cast<double>(maxRes.width) / size.width,
+ 					static_cast<double>(maxRes.height) / size.height);
+-		Size clamped(static_cast<unsigned int>(size.width * scale) & ~3u,
+-			     static_cast<unsigned int>(size.height * scale) & ~1u);
+-		LOG(HAL, Info) << "Source " << size << " clamped to " << clamped;
+-		size = clamped;
++		Size scaled(static_cast<unsigned int>(size.width * scale) & ~3u,
++			    static_cast<unsigned int>(size.height * scale) & ~1u);
++		if (scaled == size)
++			continue;
++		LOG(HAL, Info) << "Source " << size << " scaled to " << scaled;
++		size = scaled;
+ 	}
+ 
+ 	/*

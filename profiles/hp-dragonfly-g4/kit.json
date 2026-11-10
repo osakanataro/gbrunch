@@ -1,0 +1,16 @@
+{
+  "profile": "hp-dragonfly-g4",
+  "device": "HP Dragonfly G4 (board 8B63)",
+  "image": "googlebook-dragonfly.img",
+  "firmware_setup": "HP: press F10 at power-on for the BIOS setup.",
+  "boot_menu": "HP: press F9 at power-on for the boot device menu.",
+  "secure_boot": "BIOS setup (F10) -> Advanced -> Secure Boot Configuration -> disable Secure Boot.",
+  "kernel": false,
+  "notes": [
+    "Google's own kernel with the xe graphics driver; the profile adds the display options, firmware, audio",
+    "configuration, charger (ac.ko), CS35L41 speaker and internal camera (libcamera) support."
+  ],
+  "status": [
+    "Physically tested since 2026-10-31: desktop, Wi-Fi, Bluetooth, HDMI, audio, speakers, charger, internal camera."
+  ]
+}

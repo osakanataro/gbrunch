@@ -38,7 +38,10 @@ stage=$outdir/$name; tarball=$outdir/$name.tar.gz
 mkdir "$stage"
 cp -r "$assets" "$stage/assets-$profile"
 mkdir "$stage/usb" "$stage/licenses" "$stage/licenses/camera"
-cp "$here"/grow-userdata.sh "$here"/reset-firstboot.sh "$here"/apply-profile-update.sh "$here"/apply-vendor-update.sh "$stage/usb/"
+cp "$here"/grow-userdata.sh "$here"/reset-firstboot.sh "$here"/apply-profile-update.sh "$here"/apply-vendor-update.sh \
+   "$here"/apply-image-update.sh "$here"/kit_profile.py "$stage/usb/"
+[ -f "$assets/kit.json" ] || { echo "$assets has no kit.json (regenerate with tools/prepare_profile_assets.py)"; exit 1; }
+python3 "$here/kit_profile.py" "$assets" check "$here/kit/README-usb-kit.txt" "$here/kit/README.txt"
 cp "$here/make-usb-kit.sh" "$here/kit/README.txt" "$here/kit/README-usb-kit.txt" "$here/kit/NOTICE.txt" "$stage/"
 cp "$here/kit/GPL-2.0.txt" "$repo/LICENSE" "$stage/licenses/"
 cp "$repo"/camera/licenses/* "$stage/licenses/camera/"
