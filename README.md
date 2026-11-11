@@ -50,7 +50,7 @@ flowchart TD
     F --> G[Googlebook desktop]
 ```
 
-1. The builder imports the pinned Lenovo **Ruby** recovery, build **16452207 / CL3B.260622.271.R1**, from Google's official infrastructure. It checks the ZIP and extracted image hashes and retains those originals.
+1. The builder imports the pinned Lenovo **Ruby** recovery, build **16693588 / CL3B.260622.276.R5** (16452207 / CL3B.260622.271.R1 is still accepted), from Google's official infrastructure. It checks the ZIP and extracted image hashes and retains those originals.
 2. A sparse local QCOW2 view references that unchanged recovery using a relative backing path. The compatibility assembly adds independent boot/compatibility/vendor/log partitions. Google's original non-EFI partitions remain backed by the original recovery; the boot environment uses locally assembled files and a derived vendor view.
 3. GNU GRUB starts Google's original x86-64 Android kernel and matching modules. The compatibility init/boot configuration replaces or masks hardware services that expect the original Lenovo board, supplies software security services and applies the scoped vendor/SELinux changes needed by this port.
 4. On the HP, the stock Xe kernel driver and Google's Intel graphics userspace are retained. Later fixes addressed permissions, desktop color settings, scaling and logging overhead. Wi-Fi needed matching Intel firmware/PNVM and regulatory data. This is more than changing a single graphics driver.

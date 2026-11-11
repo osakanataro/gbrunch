@@ -1,17 +1,23 @@
 #!/bin/bash
 # Update an existing Googlebook disk from a newly assembled image: copy its EFI-SYSTEM (kernel, initrd,
-# grub.cfg), GBRUNCH (/oem) and GBVENDOR partitions over the disk's. userdata, metadata and GBLOG are kept,
-# Google's partitions are not touched (they are identical anyway). This is the update path for a
+# grub.cfg), GBRUNCH (/oem) and GBVENDOR partitions over the disk's. userdata, metadata and GBLOG are kept;
+# Google's partitions are not touched unless --system is given (below). This is the update path for a
 # replacement-kernel profile (the kernel and its first-stage modules live in the EFI partition and the initrd),
 # and a one-step alternative to apply-profile-update.sh + apply-vendor-update.sh for the others.
 # The disk must have been written from an image of the same layout (dd), so the partitions have the same
 # sizes; an installer-created layout with a shared EFI partition is refused for the EFI part.
 # If the image's GBVENDOR is larger, GBLOG (right after it) is shifted and reformatted, its files kept.
+# --system: also bring Google's partitions to the image's recovery build (a newer official Ruby recovery with the
+# same layout, e.g. 16452207 -> 16693588): super (system, vendor, product), boot, init_boot, vendor_boot, vbmeta,
+# pvmfw, recovery, ota_recovery, KERN-B and ROOT-B, each only when it differs from the disk. userdata, metadata, misc,
+# frp_persist, desktop_security_* and GBLOG are never written, so apps and settings are kept, like an OTA update.
+# Only move forward: Android does not support going back to an older build on the same userdata.
 # USB disks only, unless --internal is given (an internal disk the image was written to).
-# Usage: sudo bash apply-image-update.sh [--internal] /dev/sdX|/dev/nvmeXnY image.img
+# Usage: sudo bash apply-image-update.sh [--internal] [--system] /dev/sdX|/dev/nvmeXnY image.img
 set -euo pipefail
-internal=0; [ "${1:-}" = --internal ] && { internal=1; shift; }
-d=${1:?usage: sudo bash apply-image-update.sh [--internal] /dev/sdX|/dev/nvmeXnY image.img}; img=${2:?image.img}
+internal=0; system=0
+while [ $# -gt 0 ]; do case "$1" in --internal) internal=1; shift;; --system) system=1; shift;; *) break;; esac; done
+d=${1:?usage: sudo bash apply-image-update.sh [--internal] [--system] /dev/sdX|/dev/nvmeXnY image.img}; img=${2:?image.img}
 [ "$(lsblk -dno TYPE "$d")" = disk ] || { echo "$d is not a whole disk"; exit 1; }
 tran=$(lsblk -dno TRAN "$d")
 if [ "$internal" = 1 ]; then [ "$tran" != usb ] || { echo "$d is a USB disk; drop --internal"; exit 1; }
@@ -70,5 +76,44 @@ grow_vendor() {
 	mount "$l" "$tmp/mnt"; cp -r "$tmp/files/." "$tmp/mnt/"; umount "$tmp/mnt"
 	rm -rf "$tmp"; echo "  GBLOG reformatted and its files restored"
 }
+GOOGLE=(super boot_a boot_b init_boot_a init_boot_b vendor_boot_a vendor_boot_b vbmeta_a vbmeta_b pvmfw_a pvmfw_b
+        recovery_a recovery_b ota_recovery_a ota_recovery_b KERN-B ROOT-B)
+copy_if_changed() {  # NAME: copy only when the disk partition differs from the image's
+	local p start size have want
+	p=$(disk_part "$1"); read -r start size < <(img_part "$1")
+	[ "$size" = "$(blockdev --getsize64 "$p")" ] || { echo "$1: image and disk sizes differ (different layout); refusing"; exit 1; }
+	want=$(dd if="$img" bs=1M iflag=skip_bytes,count_bytes skip="$start" count="$size" status=none | sha256sum | cut -c1-64)
+	have=$(head -c "$size" "$p" | sha256sum | cut -c1-64)
+	if [ "$want" = "$have" ]; then echo "$1: unchanged"; else copy "$1"; fi
+}
+img_uuid() { sfdisk -J "$img" | python3 -c '
+import json,sys
+p=[x for x in json.load(sys.stdin)["partitiontable"]["partitions"] if x.get("name")==sys.argv[1]]
+print(p[0]["uuid"].lower())' "$1"; }
+disk_uuid() { lsblk -no PARTUUID "$(disk_part "$1")" | tr 'A-Z' 'a-z'; }
+# The image's GRUB passes androidboot.boot_part_uuid (boot_a's GUID) and each official recovery build has its own
+# partition GUIDs: an EFI partition from another build than the disk's Google partitions never finds its boot device.
+if [ "$system" = 1 ]; then
+	for n in "${GOOGLE[@]}"; do disk_part "$n" >/dev/null; img_part "$n" >/dev/null; done   # all present before writing
+elif [ "$(img_uuid boot_a)" != "$(disk_uuid boot_a)" ]; then
+	echo "$img is from another recovery build than $d (boot_a GUID $(img_uuid boot_a), disk $(disk_uuid boot_a)): use --system"; exit 1
+fi
 copy EFI-SYSTEM; copy GBRUNCH; grow_vendor; copy GBVENDOR
-sync; echo "done: EFI-SYSTEM, GBRUNCH and GBVENDOR replaced from $img (userdata, metadata and GBLOG kept)"
+if [ "$system" = 1 ]; then
+	echo "Google partitions (super is 12 GiB: reading and writing it takes a while):"
+	for n in "${GOOGLE[@]}"; do copy_if_changed "$n"; done
+	# Give the Google partitions the image's GUIDs (boot_part_uuid on the kernel command line names boot_a's).
+	guids=()
+	for n in "${GOOGLE[@]}"; do
+		want=$(img_uuid "$n"); [ "$want" = "$(disk_uuid "$n")" ] && continue
+		guids+=(-u "$(sysfs "$(disk_part "$n")" partition):$want")
+	done
+	if [ ${#guids[@]} -gt 0 ]; then
+		echo "partition GUIDs: $(( ${#guids[@]} / 2 )) set to the image's"
+		sgdisk "${guids[@]}" "$d" >/dev/null; partprobe "$d"; udevadm settle
+		[ "$(img_uuid boot_a)" = "$(disk_uuid boot_a)" ] || { echo "boot_a GUID not updated"; exit 1; }
+	fi
+fi
+sync
+if [ "$system" = 1 ]; then echo "done: EFI-SYSTEM, GBRUNCH, GBVENDOR and Google's system partitions updated from $img (userdata, metadata and GBLOG kept)"
+else echo "done: EFI-SYSTEM, GBRUNCH and GBVENDOR replaced from $img (userdata, metadata and GBLOG kept)"; fi

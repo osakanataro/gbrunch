@@ -40,9 +40,12 @@ C. Updating a disk that already runs Googlebook (userdata and logs are kept)
      sudo bash usb/apply-vendor-update.sh  [--internal] /dev/sdX @VENDOR_EROFS@      GBVENDOR
      sudo bash usb/apply-image-update.sh   [--internal] /dev/sdX @IMAGE@             EFI (kernel, initrd, GRUB), GBRUNCH, GBVENDOR
    @KERNEL_UPDATE@
+   A kit built from a newer Google recovery: add --system to apply-image-update.sh. It also writes Google's
+   system partitions (super, boot, vbmeta, ...) where they differ, and keeps userdata, metadata and GBLOG, so
+   apps and settings stay, like an OTA update. Never use it to go back to an older recovery build.
 
 grow-userdata.sh moves Android userdata to the free space of the disk; without it the first boot
 runs out of space and restarts repeatedly. reset-firstboot.sh returns a disk to its first-boot state
 (userdata erased, logs on GBLOG kept). Android logs are written to the GBLOG partition
 (FAT, label GBRUNCH_LOG, Android-Logs/run-*/): read it from Linux after a test.
-System updates (OTA) do not apply to this installation; a new Google recovery needs a new kit.
+System updates (OTA) do not apply to this installation; a new Google recovery comes as a new kit (see C).

@@ -7,7 +7,7 @@ vendor/ramdisk stay local. The default entry is HP/QEMU-gated; other hardware re
 import argparse,gzip,hashlib,json,os,pathlib,shutil,stat,struct,subprocess,tempfile,urllib.request,uuid,zipfile,zlib
 from inspect_recovery import gpt,decompress,align,u32
 from googlebook_boot_menu import render as render_boot_menu
-from assemble_external_lab import URL,ZIP_HASH,RAW_HASH,sha
+from assemble_external_lab import RECOVERIES,sha
 
 def run(*args,**kwargs):return subprocess.run([str(a) for a in args],check=True,**kwargs)
 
@@ -38,15 +38,24 @@ def original_boot_parts(blobs):
     return kernel,b''.join(fragments)+generic
 
 def recovery(a):
+    """Return (raw path, recovery record). --download and an unknown cache use --build (default: newest);
+    a given --recovery-zip/--recovery-raw may be any known build and is identified by its hash."""
+    want=next((r for r in RECOVERIES if r['build']==a.build),None)
+    if not want:raise ValueError('unknown recovery build %s (known: %s)'%(a.build,', '.join(r['build'] for r in RECOVERIES)))
     if a.recovery_raw:
         base=a.recovery_raw.resolve()
     else:
-        z=a.recovery_zip.resolve() if a.recovery_zip else a.cache/'ruby-recovery.zip'
-        if not z.exists():
-            part=z.with_suffix('.download');print('Downloading official recovery:',URL,flush=True)
-            urllib.request.urlretrieve(URL,part);part.rename(z)
-        if sha(z)!=ZIP_HASH:raise ValueError('Official ZIP hash mismatch')
-        base=a.cache/'ruby-recovery.raw'
+        if a.recovery_zip:
+            z=a.recovery_zip.resolve();zh=sha(z)
+            want=next((r for r in RECOVERIES if r['zip']==zh),None)
+            if not want:raise ValueError('Official ZIP hash mismatch (not a known Ruby recovery: %s)'%zh)
+        else:
+            z=a.cache/('ruby-%s-recovery.zip'%want['build'])
+            if not z.exists():
+                part=z.with_suffix('.download');print('Downloading official recovery:',want['url'],flush=True)
+                urllib.request.urlretrieve(want['url'],part);part.rename(z)
+            if sha(z)!=want['zip']:raise ValueError('Official ZIP hash mismatch')
+        base=a.cache/('ruby-%s-recovery.raw'%want['build'])
         if not base.exists():
             part=base.with_suffix('.extracting')
             with zipfile.ZipFile(z) as archive:
@@ -60,8 +69,10 @@ def recovery(a):
             part.rename(base)
     print('Verifying official raw recovery (~19 GB read)...',flush=True)
     assert base.is_file() and not str(base).startswith('/dev/')
-    if sha(base)!=RAW_HASH:raise ValueError('Official raw recovery hash mismatch')
-    return base
+    h=sha(base);rec=next((r for r in RECOVERIES if r['raw']==h),None)
+    if not rec:raise ValueError('Official raw recovery hash mismatch (not a known Ruby recovery: %s)'%h)
+    print('Recovery: ruby %s (%s)'%(rec['build'],rec['id']),flush=True)
+    return base,rec
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
@@ -69,6 +80,8 @@ def main():
     s.add_argument('--download',action='store_true');s.add_argument('--recovery-zip',type=pathlib.Path);s.add_argument('--recovery-raw',type=pathlib.Path)
     p.add_argument('--output',type=pathlib.Path,required=True)
     p.add_argument('--cache',type=pathlib.Path,default=pathlib.Path('google-recovery-cache'))
+    p.add_argument('--build',default=RECOVERIES[0]['build'],
+                   help='official recovery build for --download (default: newest, %s)'%RECOVERIES[0]['build'])
     p.add_argument('--assets',type=pathlib.Path,default=pathlib.Path(__file__).resolve().parent)
     p.add_argument('--format',choices=['raw','qcow2'],default='raw')
     p.add_argument('--local-files',type=pathlib.Path,help='directory with the non-redistributable files the profile lists in local_files (e.g. surface/fetch-ipu4p-firmware.sh output)')
@@ -79,7 +92,7 @@ def main():
     manifest=json.loads((assets/'native-assets.json').read_text())
     for n,h in manifest['files'].items():
         if sha(assets/n)!=h:raise ValueError('Asset hash mismatch: '+n)
-    a.cache.mkdir(parents=True,exist_ok=True);base=recovery(a)
+    a.cache.mkdir(parents=True,exist_ok=True);base,rec=recovery(a)
     with base.open('rb') as f:
         parts=gpt(f);by={v['name']:v for v in parts};f.seek(0);mbr=bytearray(f.read(512));header=bytearray(f.read(512))
         tlba,count,esz=struct.unpack_from('<QII',header,72);f.seek(tlba*512);table=bytearray(f.read(count*esz))
@@ -195,7 +208,7 @@ def main():
             run('qemu-img','rebase','-u','-f','qcow2','-F','raw',
                 '-b',os.path.relpath(base,out.parent),out)
         for v in appended:v.pop('file')
-        report={'scope':'local experimental Android image; HP interface not yet tested','physical_boot_enabled':manifest['physical_boot_enabled'],'original_raw_sha256':RAW_HASH,
+        report={'scope':'local experimental Android image; HP interface not yet tested','physical_boot_enabled':manifest['physical_boot_enabled'],'original_raw_sha256':rec['raw'],'recovery_build':rec['build'],'recovery_id':rec['id'],
                 'system_preservation':'All original GPT records retained; EFI changed only in output; original super/system/vendor bytes untouched',
                 'vendor':result,'appended_partitions':appended,'cmdline':cmd,'format':a.format,
                 'kernel':({'source':'profile replacement kernel','release':replacement['release'],'sha256':replacement['sha256'],

@@ -2,7 +2,7 @@
 """Build V7 locally from official Google recovery, then prepare one 32 GB USB."""
 import argparse,pathlib,subprocess,plistlib,sys,os,shutil,json,gzip,hashlib,datetime
 R=pathlib.Path(__file__).resolve().parent
-URL='https://dl.google.com/device/recovery/ruby-user/16452207/recovery.zip'
+URL='https://dl.google.com/device/recovery/ruby-user/16693588/recovery.zip'
 def run(*a,**kw):return subprocess.run([str(x) for x in a],check=True,**kw)
 def sha(path):
  h=hashlib.sha256()

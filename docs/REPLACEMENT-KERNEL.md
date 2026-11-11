@@ -64,7 +64,16 @@ and per profile `PROFILE/` with the assets, the GBVENDOR image extracted from th
 README whose commands run from the kit folder; `KITDIR/README.txt` lists the profiles. `tools/usb/make-usb-kit.sh`
 in a release kit does the same for end users (one profile, `usb/`). `tools/usb/apply-image-update.sh` copies EFI-SYSTEM, GBRUNCH and
 GBVENDOR from a new image onto a disk written from the same layout, which is how a kernel update reaches a
-replacement-kernel profile without a new `dd` (userdata, metadata and GBLOG are kept).
+replacement-kernel profile without a new `dd` (userdata, metadata and GBLOG are kept). With `--system` it also
+writes Google's system partitions (super, boot, init_boot, vendor_boot, vbmeta, pvmfw, recovery, ota_recovery, KERN-B,
+ROOT-B) where they differ, which moves an installed disk to a newer official recovery while keeping userdata.
+
+Recovery builds: `tools/assemble_external_lab.py` lists the known official Ruby recoveries (`RECOVERIES`, newest
+first); `assemble_native_android.py` takes any of them by hash (`--recovery-raw`/`--recovery-zip`) and downloads
+the newest, or `--build`. 16452207 (CL3B.260622.271.R1) and 16693588 (CL3B.260622.276.R5, 2026-11-06) share the
+GPT, the logical partition extents in super (vendor_a at 6289358848) and a byte-identical kernel; the newer one
+changes apps, APEXes (including the DRAS audio HAL), the HWC and build properties, not init rc files, VINTF, the
+SELinux policy, fstab or kernel modules.
 
 ## Build
 

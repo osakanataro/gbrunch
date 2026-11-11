@@ -9,9 +9,20 @@ import argparse, gzip, hashlib, json, pathlib, shutil, struct, subprocess
 import tempfile, urllib.request, uuid, zipfile, zlib
 from inspect_recovery import boot, gpt
 
-URL='https://dl.google.com/device/recovery/ruby-user/16452207/recovery.zip'
-ZIP_HASH='3c4dc7f636f29a1207e71d001fd2864aa20ce8354faecd2ef1ae47582b977f6c'
-RAW_HASH='4f4490415d4db0721fa99ad10abd64b1b05c284b6c0e413907da948561de8c9e'
+# Official Lenovo Ruby recoveries, newest first (Google's production_recovery.json). Their GPT, the
+# logical partitions in super and the kernel are identical, so the pinned extents (vendor_a in
+# native_vendor_in_vm.py) and the profile kernels and modules apply to both.
+RECOVERIES=[
+    {'build':'16693588','id':'CL3B.260622.276.R5','date':'2026-11-06',
+     'url':'https://dl.google.com/device/recovery/ruby-user/16693588/recovery.zip',
+     'zip':'cea70d381666c62e4035bea46ed12d8e92711d0639d147a667adcdcd8122bfa1',
+     'raw':'76af59a4419c61a380c12adb2567009dfd5631377cd4e2de7335c174b30b0121'},
+    {'build':'16452207','id':'CL3B.260622.271.R1','date':'2026-10',
+     'url':'https://dl.google.com/device/recovery/ruby-user/16452207/recovery.zip',
+     'zip':'3c4dc7f636f29a1207e71d001fd2864aa20ce8354faecd2ef1ae47582b977f6c',
+     'raw':'4f4490415d4db0721fa99ad10abd64b1b05c284b6c0e413907da948561de8c9e'},
+]
+URL,ZIP_HASH,RAW_HASH=(RECOVERIES[0][k] for k in ('url','zip','raw'))
 
 def sha(path):
     h=hashlib.sha256()

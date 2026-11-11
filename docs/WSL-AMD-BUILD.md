@@ -55,8 +55,8 @@ Google recovery can be downloaded directly from its pinned official source when 
 ```bash
 mkdir -p ~/build/gbrunch-private/downloads
 cd ~/build/gbrunch-private/downloads
-curl -fL --retry 3 https://dl.google.com/device/recovery/ruby-user/16452207/recovery.zip -o ruby-recovery.zip
-echo '3c4dc7f636f29a1207e71d001fd2864aa20ce8354faecd2ef1ae47582b977f6c  ruby-recovery.zip' | sha256sum -c -
+curl -fL --retry 3 https://dl.google.com/device/recovery/ruby-user/16693588/recovery.zip -o ruby-recovery.zip
+echo 'cea70d381666c62e4035bea46ed12d8e92711d0639d147a667adcdcd8122bfa1  ruby-recovery.zip' | sha256sum -c -
 ```
 
 Never publish recovery-derived proprietary images or private device logs. The compiled AMD kernel has not been tested on physical AMD hardware.

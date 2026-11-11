@@ -1,7 +1,7 @@
 GBRUNCH release kit: builds a Googlebook OS disk image from Google's official recovery
 
 This kit holds open-source and redistributable files only (see NOTICE.txt). It does not contain
-Google's software: make-usb-kit.sh downloads the official recovery (ruby 16452207, 7.8 GB) from
+Google's software: make-usb-kit.sh downloads the official recovery (ruby 16693588, 7.8 GB) from
 dl.google.com, checks its sha256, and builds the image on your PC.
 
 Requirements: an x86_64 Linux PC (Ubuntu 24.04 or later), about 50 GB free, and

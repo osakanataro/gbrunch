@@ -8,7 +8,7 @@ import hashlib,io,json,pathlib,re,runpy,struct,subprocess,tarfile
 
 W=pathlib.Path('/work')
 SOURCE=pathlib.Path('/dev/vdb')
-OFFSET=6289358848  # Pinned Ruby 16452207 vendor_a extent.
+OFFSET=6289358848  # Pinned Ruby vendor_a extent (the same in 16452207 and 16693588).
 RULES=['init','vendor_configs_file','file','mounton','init','system_file','file','mounton',
        'init','serial_device','chr_file','open,read,write,getattr,ioctl',
        'hal_keymint_default','vendor_boot_security_patch_level_prop','file','open,read,getattr,map',

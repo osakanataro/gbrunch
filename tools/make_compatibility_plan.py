@@ -26,7 +26,7 @@ for name, action in changes.items():
     files.append({'source': name, 'expected_sha256': hashlib.sha256(source.read_bytes()).hexdigest(),
                   'review_action': action})
 result = {'status': 'design/review plan, not applied or bootable',
-    'official_build': 'ruby/16452207/CL3B.260622.271.R1',
+    'official_build': 'ruby/16693588/CL3B.260622.276.R5',
     'original_image_sha256': '4f4490415d4db0721fa99ad10abd64b1b05c284b6c0e413907da948561de8c9e',
     'files': files,
     'unresolved': ['Weaver/Secretkeeper declarations and required framework matrix checks',
