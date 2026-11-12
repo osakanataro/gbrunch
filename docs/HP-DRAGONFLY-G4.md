@@ -155,6 +155,12 @@ camera. The pieces:
    - HAL changes. All Android streams are produced from one ISP output, by scaling and JPEG encoding. The output is
      capped at the 2x2 binned mode (1292x972). In one measurement each, the camera provider took about 1.5 cores
      at full resolution and about 0.6 binned. The HAL reads strides from the minigbm handle and links the platform `libcamera_metadata`.
+
+   Since 2026-11-11 the profile uses the same build as the Surface Pro 7 (patches 0001-0007, see
+   `docs/REPLACEMENT-KERNEL.md`). For hi556 this adds the orientation from the sensor rotation (0003), anti-flicker
+   AGC with `flickerPeriod: 10000` in `hi556.yaml` for 50 Hz lighting (0004; use 8333 for 60 Hz, 0 for off), and
+   the HAL scaling of the source to the largest same-aspect size for every stream (0006, 0007). 0002 and the optional
+   log-levels file (0005) do not apply to hi556.
 3. Integration. `/oem/camera/lib64` is bind-mounted over `/vendor/lib64/libcamera`, which Ruby uses only for its
    IPU7 plugins. `ro.hardware.camera=gbrunch` makes the legacy camera provider load
    `/vendor/lib64/hw/camera.gbrunch.so`. That module is a small loader for the libcamera HAL, added to the locally

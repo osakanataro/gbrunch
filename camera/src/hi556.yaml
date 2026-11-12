@@ -16,4 +16,7 @@ algorithms:
                 -0.05, -0.55,  1.60 ]
   - Adjust:
   - Agc:
+      # GBRUNCH camera/patches/0004: keep exposure times to whole light flicker periods. 10000 us for 50 Hz mains
+      # (eastern Japan, Europe); use 8333 for 60 Hz (western Japan, North America); 0 turns it off.
+      flickerPeriod: 10000
 ...

@@ -266,7 +266,7 @@ on boot
  },
  'hp-dragonfly-g4':{
   'board':'8B63',
-  'compat_sha256':'f2478ea67705ea3f1f3dcbfd07e1dec0cf7f677ab9f126114d6bdec01a64a4f7',
+  'compat_sha256':'d8bf4e2ad7ab5b8b0d262723cfe5b23c672feea14eea724601fef0775fa1d654',  # + libcamera patches 0001-0007, hi556 anti-flicker (50 Hz)
   # Physical test 2026-10-31: with defaults the RPL-U eDP primary plane faulted
   # ("[PLANE:33:plane 1A] fault", Y-tiled XRGB via DPT) and the panel went black.
   # These xe display options removed every fault; setup and apps then worked.
@@ -328,16 +328,17 @@ on boot
   # Internal camera: upstream libcamera (simple pipeline + software ISP + Android HAL), camera/build.sh
   # (--camera WORK/out). lib64/ is bind-mounted over /vendor/lib64/libcamera, where GBVENDOR's camera.gbrunch.so
   # loads libcamera-hal.so. bin/gbcam-probe is a manual capture test (logcat tag gbcam), not started by init.
-  # Pinned to camera/build.sh with patch 0001 only (the build before 0002/0003 were added); a rebuild with the
-  # current patches changes libcamera.so and libcamera-hal.so; re-pin and re-test the hi556 camera at the next Dragonfly build.
+  # The same camera/build.sh output as surface-pro-7 (patches 0001-0007): 0003 native orientation, 0004 anti-flicker
+  # (hi556.yaml flickerPeriod 10000, 50 Hz), 0005 optional log-levels file (none here), 0006/0007 HAL sizes; 0002 is
+  # ov5693/ov8865 only.
   'oem_camera':[
    {'file':'lib64/libc++_shared.so','sha256':'39faf2d59346e65a18980f207794fab2f1faff8a8de3f087b8319a181fa16fbd'},
-   {'file':'lib64/libcamera-base.so','sha256':'0953d1e01293cdea274a3072f7afe9cfcc3f15c9a962b1c504b43c1799f2d66d'},
-   {'file':'lib64/libcamera.so','sha256':'c5c6232a1d378d821d04e5d2552f769c74b70d2b9ce11026772a013bd454137b'},
-   {'file':'lib64/libcamera-hal.so','sha256':'268f8a18ddee1c5c6248ceaf39bf67e69f03a4d09102b3cb9383a2c9aa4745f7'},
-   {'file':'lib64/libcamera/ipa/ipa_softisp.so','sha256':'c56d5d44d1210af6070f8c6d261a847c69f1b4b291b22e3cd0a83d4d45afb40e'},
+   {'file':'lib64/libcamera-base.so','sha256':'e6ea1e8fbe72d90e4e7a067dc68b6660e8efd714d816eab1de8261b56a458521'},
+   {'file':'lib64/libcamera.so','sha256':'94f21f9530815b9a7f99a9197316823518ca78ed19c39fa05599f29bef217aa9'},
+   {'file':'lib64/libcamera-hal.so','sha256':'064e9c866643b490f3fb947dfb067d624e65d416c13e2266cf7771f817db3017'},
+   {'file':'lib64/libcamera/ipa/ipa_softisp.so','sha256':'f540374d6da97ff2906dd76074add18d2e6c8ff5ed005b7bb7cd1c3215c3a40f'},
    {'file':'lib64/share/libcamera/ipa/softisp/uncalibrated.yaml','sha256':'0689579ca79036bbd31d104deafca70fb8b267c4c8f8492e07bd6f6e875ee1ac'},
-   {'file':'lib64/share/libcamera/ipa/softisp/hi556.yaml','sha256':'73eb25a6020fe76e2502c39a42dd166417b1b8c4c7c3c185ee30478f8e7846e0'},
+   {'file':'lib64/share/libcamera/ipa/softisp/hi556.yaml','sha256':'1e9ccd37f26ec8c21fbb39f1ff8c5e5fb83038fe57dc2f551ecebbeaedb7bbf9'},
    {'file':'lib64/etc/libcamera/camera_hal.yaml','sha256':'a049647d62d3f92fa346a5058b55bb4a504af04cd28f337af323c2b6734de428'},
    {'file':'bin/gbcam-probe','sha256':'601005b7c8e1411b2803261f19a44eb34588f0f0e639bc4c69e74423629c5147',
     'label':'hal_camera_default_exec','mode':'0755'},
